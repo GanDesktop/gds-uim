@@ -1,0 +1,25 @@
+[package]
+name = "uim-anti-webui"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# A separate workspace keeps AntiWebUI's upstream wgpu patches out of GPUI builds.
+[workspace]
+
+[dependencies]
+gds-uim = { path = "../.." }
+anti-webui = { git = "https://github.com/bea4dev/AntiWebUI", rev = "f8035a5f0f7d439d2bebe3479e239c4e6254c626", default-features = false, features = ["wayland", "x11", "macos", "windows"] }
+
+# Cargo does not inherit patches from git dependencies. These match AntiWebUI's lockfile.
+[patch.crates-io]
+naga = { git = "https://github.com/bea4dev/wgpu", rev = "ff143aeeb126dce521b87f47547565c4b6a6da1e" }
+naga-types = { git = "https://github.com/bea4dev/wgpu", rev = "ff143aeeb126dce521b87f47547565c4b6a6da1e" }
+wgpu = { git = "https://github.com/bea4dev/wgpu", rev = "ff143aeeb126dce521b87f47547565c4b6a6da1e" }
+wgpu-core = { git = "https://github.com/bea4dev/wgpu", rev = "ff143aeeb126dce521b87f47547565c4b6a6da1e" }
+wgpu-core-deps-apple = { git = "https://github.com/bea4dev/wgpu", rev = "ff143aeeb126dce521b87f47547565c4b6a6da1e" }
+wgpu-core-deps-emscripten = { git = "https://github.com/bea4dev/wgpu", rev = "ff143aeeb126dce521b87f47547565c4b6a6da1e" }
+wgpu-core-deps-windows-linux-android = { git = "https://github.com/bea4dev/wgpu", rev = "ff143aeeb126dce521b87f47547565c4b6a6da1e" }
+wgpu-hal = { git = "https://github.com/bea4dev/wgpu", rev = "ff143aeeb126dce521b87f47547565c4b6a6da1e" }
+wgpu-naga-bridge = { git = "https://github.com/bea4dev/wgpu", rev = "ff143aeeb126dce521b87f47547565c4b6a6da1e" }
+wgpu-types = { git = "https://github.com/bea4dev/wgpu", rev = "ff143aeeb126dce521b87f47547565c4b6a6da1e" }

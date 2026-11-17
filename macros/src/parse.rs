@@ -1,22 +1,21 @@
 use proc_macro2::{Span, TokenStream, TokenTree};
 use quote::quote;
 use syn::{
-    Expr, ExprPath, Ident, Lit, Pat, Result, Token, braced, bracketed, parenthesized,
+    Expr, ExprPath, Ident, Lit, Member, Pat, Result, Token, braced, bracketed, parenthesized,
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
     spanned::Spanned,
     token,
 };
 
-mod kw {
-    syn::custom_keyword!(case);
-    syn::custom_keyword!(end);
-}
-
 pub struct Expression {
     pub head: Head,
-    pub body: Body,
-    pub suffixes: Vec<(Value, Body)>,
+    pub suffixes: Vec<Suffix>,
+}
+
+pub enum Suffix {
+    Call(Value),
+    Field(Member),
 }
 
 pub enum Head {
@@ -26,17 +25,23 @@ pub enum Head {
 
 pub enum Value {
     Rust(Box<Expr>),
+    Field(Box<Value>, Member),
+    Unary(TokenStream, Box<Value>),
     Clone(Token![~], Box<Value>),
+    Tuple(Span, Vec<Expression>),
     Mapper(Box<Mapper>),
     Closure(Box<Closure>),
-    Control(Box<Control<Expression>>),
+    Control(Box<Control>),
 }
 
 impl Value {
     pub fn span(&self) -> Span {
         match self {
             Self::Rust(value) => value.span(),
+            Self::Field(_, member) => member.span(),
+            Self::Unary(op, _) => op.span(),
             Self::Clone(tilde, _) => tilde.span(),
+            Self::Tuple(span, _) => *span,
             Self::Mapper(mapper) => mapper.span,
             Self::Closure(closure) => closure.arrow.span(),
             Self::Control(control) => control.span,
@@ -51,29 +56,32 @@ pub struct Closure {
     pub body: Expression,
 }
 
-pub struct Control<T> {
+pub struct Control {
     pub span: Span,
-    pub kind: ControlKind<T>,
+    pub kind: ControlKind,
 }
 
-pub enum ControlKind<T> {
+pub enum ControlKind {
     If {
-        branches: Vec<(Expr, T)>,
-        otherwise: Option<Box<T>>,
+        branches: Vec<(Expr, Branch)>,
+        otherwise: Option<Box<Branch>>,
     },
     Match {
         value: Box<Expr>,
-        arms: Vec<Arm<T>>,
+        arms: Vec<Arm>,
     },
 }
 
-pub struct Arm<T> {
+pub struct Arm {
     pub pattern: Pat,
     pub guard: Option<Expr>,
-    pub body: T,
+    pub body: Branch,
 }
 
-pub struct Body(pub Vec<Section>);
+pub enum Branch {
+    Mapping(Section),
+    Value(Expression),
+}
 
 pub enum Section {
     Attributes(Attributes),
@@ -87,13 +95,14 @@ pub enum Attribute {
     Method(Ident, Vec<Expression>),
     Id(Token![#], Expression),
     DebugSelector(Token![#], Option<Token![move]>, Expression),
-    Control(Box<Control<Attributes>>),
+    Group(Section),
+    Control(Box<Control>),
 }
 
 pub struct Mapper {
     pub span: Span,
     pub capture: Option<Token![move]>,
-    pub attributes: Attributes,
+    pub section: Section,
 }
 
 pub struct Children(pub Vec<Child>);
@@ -103,18 +112,12 @@ pub enum Child {
         spread: Option<Token![..]>,
         expression: Expression,
     },
-    Control(Box<Control<Children>>),
+    Group(Section),
+    Control(Box<Control>),
 }
 
-// Control markers are only recognized at the current token-tree level. Rust
-// escapes, macro arguments and nested DSL groups retain their own parsers.
-fn at_boundary(input: ParseStream) -> bool {
-    if !input.peek(Token![@]) {
-        return false;
-    }
-    let fork = input.fork();
-    let _ = fork.parse::<Token![@]>();
-    fork.peek(Token![else]) || fork.peek(kw::case) || fork.peek(kw::end)
+fn control_ahead(input: ParseStream) -> bool {
+    input.peek(Token![if]) || input.peek(Token![match])
 }
 
 fn closure_ahead(input: ParseStream) -> bool {
@@ -137,64 +140,97 @@ impl Parse for Expression {
             parenthesized!(content in input);
             let arguments = arguments(&content)?;
             if !input.peek(Token![.]) || input.peek(Token![..]) {
-                return Err(input.error("expected .callable after an argument list or => after closure parameters; use $(...) for a Rust value or tuple"));
+                return Err(input.error("expected .callable after an argument list or => after closure parameters; use @(...) for a tuple"));
             }
             input.parse::<Token![.]>()?;
-            Head::Call(arguments, input.parse()?)
+            Head::Call(arguments, Value::atom(input)?)
         } else if input.peek(Token![.]) && !input.peek(Token![..]) {
             input.parse::<Token![.]>()?;
-            Head::Call(Vec::new(), input.parse()?)
+            Head::Call(Vec::new(), Value::atom(input)?)
         } else {
             Head::Value(input.parse()?)
         };
-
-        let body = input.parse()?;
         let mut suffixes = Vec::new();
-        while input.peek(Token![.]) && !input.peek(Token![..]) {
-            input.parse::<Token![.]>()?;
-            suffixes.push((input.parse()?, input.parse()?));
+        loop {
+            if input.peek(Token![.]) && !input.peek(Token![..]) {
+                input.parse::<Token![.]>()?;
+                suffixes.push(Suffix::Call(Value::atom(input)?));
+            } else if input.peek(Token![->]) {
+                input.parse::<Token![->]>()?;
+                suffixes.push(Suffix::Field(input.parse()?));
+            } else {
+                break;
+            }
         }
-        if !input.is_empty()
-            && !input.peek(Token![,])
-            && !input.peek(Token![;])
-            && !input.peek(Token![:])
-            && !at_boundary(input)
-        {
-            return Err(input.error(
-                "expected .callable, a block, or a separator; use $ or $(...) for Rust expressions",
-            ));
-        }
-        Ok(Self {
-            head,
-            body,
-            suffixes,
-        })
+        // The caller owns the boundary: a condition ends before its branch,
+        // while arguments, attributes and children require their own separator.
+        Ok(Self { head, suffixes })
     }
 }
 
 impl Parse for Value {
     fn parse(input: ParseStream) -> Result<Self> {
+        let mut value = Self::atom(input)?;
+        // Field projection binds inside unary operands: ~task->label clones
+        // the field, not the task. After a call, -> projects its result instead.
+        while input.peek(Token![->]) {
+            input.parse::<Token![->]>()?;
+            value = Self::Field(Box::new(value), input.parse()?);
+        }
+        Ok(value)
+    }
+}
+
+impl Value {
+    fn atom(input: ParseStream) -> Result<Self> {
         if input.peek(Token![~]) {
             return Ok(Self::Clone(input.parse()?, Box::new(input.parse()?)));
+        }
+        if input.peek(Token![!])
+            || input.peek(Token![-])
+            || input.peek(Token![*])
+            || input.peek(Token![&])
+        {
+            let op: TokenTree = input.parse()?;
+            let mutable = if matches!(&op, TokenTree::Punct(p) if p.as_char() == '&') {
+                input.parse::<Option<Token![mut]>>()?
+            } else {
+                None
+            };
+            return Ok(Self::Unary(
+                quote! { #op #mutable },
+                Box::new(input.parse()?),
+            ));
         }
         if closure_ahead(input) {
             return Ok(Self::Closure(Box::new(input.parse()?)));
         }
-        if input.peek(token::Brace) || input.peek(Token![move]) {
+        if input.peek(token::Brace) || input.peek(token::Bracket) || input.peek(Token![move]) {
             return Ok(Self::Mapper(Box::new(Mapper::block(input)?)));
         }
         if input.peek(Token![@]) {
-            let control: Control<Expression> = input.parse()?;
-            if matches!(
-                &control.kind,
-                ControlKind::If {
-                    otherwise: None,
-                    ..
-                }
-            ) {
+            let at: Token![@] = input.parse()?;
+            let content;
+            parenthesized!(content in input);
+            return Ok(Self::Tuple(at.span, arguments(&content)?));
+        }
+        if control_ahead(input) {
+            let control: Control = input.parse()?;
+            let mapping = control.is_mapping();
+            if let ControlKind::If {
+                otherwise: None, ..
+            } = &control.kind
+                && !mapping
+            {
                 return Err(syn::Error::new(
                     control.span,
-                    "@if used as a value requires @else; only attribute and children fragments may omit it",
+                    "if used as a value requires else",
+                ));
+            }
+            if !mapping && control.has_mapping() {
+                return Err(syn::Error::new(
+                    control.span,
+                    "cannot mix mapping and value branches in a value control",
                 ));
             }
             return Ok(Self::Control(Box::new(control)));
@@ -207,25 +243,11 @@ impl Parse for Value {
             let content;
             parenthesized!(content in input);
             let tokens: TokenStream = content.parse()?;
-            // Keep parentheses: $(a, b) is a tuple and $() is unit.
             return Ok(Self::Rust(Box::new(syn::parse2(quote! { (#tokens) })?)));
         }
         if input.peek(Lit) {
             let literal: Lit = input.parse()?;
             return Ok(Self::Rust(Box::new(syn::parse2(quote! { #literal })?)));
-        }
-        if input.peek(Token![-]) {
-            let minus: Token![-] = input.parse()?;
-            let literal: Lit = input.parse()?;
-            if !matches!(literal, Lit::Int(_) | Lit::Float(_)) {
-                return Err(syn::Error::new(
-                    literal.span(),
-                    "expected a numeric literal after -; use $(...) for negation",
-                ));
-            }
-            return Ok(Self::Rust(Box::new(syn::parse2(
-                quote! { #minus #literal },
-            )?)));
         }
         if input.peek(Ident)
             || input.peek(Token![::])
@@ -251,7 +273,9 @@ impl Parse for Value {
             }
             return Ok(Self::Rust(Box::new(Expr::Path(path))));
         }
-        Err(input.error("expected a value, closure, @if/@match, .callable, (arguments).callable, ~value, or $(Rust expression)"))
+        Err(input.error(
+            "expected a UIM value, mapper, closure, if/match, @(tuple), or $(Rust expression)",
+        ))
     }
 }
 
@@ -290,45 +314,66 @@ impl Parse for Closure {
     }
 }
 
-fn rust_header(input: ParseStream) -> Result<Expr> {
-    let content;
-    parenthesized!(content in input);
-    let expression = content.parse()?;
-    if !content.is_empty() {
-        return Err(content.error("expected one Rust expression in the directive header"));
-    }
-    Ok(expression)
+fn uim_expression(input: ParseStream) -> Result<Expr> {
+    syn::parse2(crate::expand::expression(&input.parse()?))
 }
 
-impl<T: Parse> Parse for Control<T> {
+fn condition(input: ParseStream) -> Result<Expr> {
+    if input.peek(Token![let]) {
+        let let_token: Token![let] = input.parse()?;
+        let pattern = Pat::parse_multi_with_leading_vert(input)?;
+        let eq: Token![=] = input.parse()?;
+        let value = uim_expression(input)?;
+        return syn::parse2(quote! { #let_token #pattern #eq #value });
+    }
+    // Rust escapes may contain a whole let-chain. Its outer parentheses are
+    // only an escape boundary, not parentheses around a Rust let condition.
+    let mut expr = uim_expression(input)?;
+    while let Expr::Paren(paren) = expr {
+        expr = *paren.expr;
+    }
+    Ok(expr)
+}
+
+impl Control {
+    fn bodies(&self) -> Vec<&Branch> {
+        match &self.kind {
+            ControlKind::If {
+                branches,
+                otherwise,
+            } => branches
+                .iter()
+                .map(|(_, b)| b)
+                .chain(otherwise.as_deref())
+                .collect(),
+            ControlKind::Match { arms, .. } => arms.iter().map(|a| &a.body).collect(),
+        }
+    }
+    pub fn is_mapping(&self) -> bool {
+        let bodies = self.bodies();
+        !bodies.is_empty() && bodies.iter().all(|b| matches!(b, Branch::Mapping(_)))
+    }
+    fn has_mapping(&self) -> bool {
+        self.bodies()
+            .iter()
+            .any(|b| matches!(b, Branch::Mapping(_)))
+    }
+}
+
+impl Parse for Control {
     fn parse(input: ParseStream) -> Result<Self> {
-        let at: Token![@] = input.parse()?;
+        let span = input.span();
         let kind = if input.peek(Token![if]) {
             input.parse::<Token![if]>()?;
-            let mut branches = vec![(rust_header(input)?, input.parse()?)];
+            let mut branches = vec![(condition(input)?, input.parse()?)];
             let mut otherwise = None;
-            loop {
-                input
-                    .parse::<Token![@]>()
-                    .map_err(|_| input.error("expected @else or @end to close @if"))?;
-                if input.peek(kw::end) {
-                    input.parse::<kw::end>()?;
-                    break;
-                }
-                input
-                    .parse::<Token![else]>()
-                    .map_err(|_| input.error("expected @else or @end in @if"))?;
+            while input.peek(Token![else]) {
+                input.parse::<Token![else]>()?;
                 if input.peek(Token![if]) {
                     input.parse::<Token![if]>()?;
-                    branches.push((rust_header(input)?, input.parse()?));
+                    branches.push((condition(input)?, input.parse()?));
                 } else {
                     otherwise = Some(Box::new(input.parse()?));
-                    input
-                        .parse::<Token![@]>()
-                        .map_err(|_| input.error("expected @end after @else"))?;
-                    input
-                        .parse::<kw::end>()
-                        .map_err(|_| input.error("expected @end after @else"))?;
                     break;
                 }
             }
@@ -336,124 +381,134 @@ impl<T: Parse> Parse for Control<T> {
                 branches,
                 otherwise,
             }
-        } else if input.peek(Token![match]) {
+        } else {
             input.parse::<Token![match]>()?;
-            let value = Box::new(rust_header(input)?);
+            let value = Box::new(uim_expression(input)?);
+            input.parse::<Token![^]>()?;
+            let content;
+            parenthesized!(content in input);
             let mut arms = Vec::new();
-            loop {
-                input
-                    .parse::<Token![@]>()
-                    .map_err(|_| input.error("expected @case (...) or @end in @match"))?;
-                if input.peek(kw::end) {
-                    input.parse::<kw::end>()?;
-                    break;
-                }
-                input
-                    .parse::<kw::case>()
-                    .map_err(|_| input.error("expected @case (...) or @end in @match"))?;
-                let header;
-                parenthesized!(header in input);
-                let pattern = Pat::parse_multi_with_leading_vert(&header)?;
-                let guard = if header.peek(Token![if]) {
-                    header.parse::<Token![if]>()?;
-                    Some(header.parse()?)
+            while !content.is_empty() {
+                let pattern = Pat::parse_multi_with_leading_vert(&content)?;
+                let guard = if content.peek(Token![if]) {
+                    content.parse::<Token![if]>()?;
+                    let mut tokens = TokenStream::new();
+                    while !content.is_empty() && !content.peek(Token![=>]) {
+                        tokens.extend([content.parse::<TokenTree>()?]);
+                    }
+                    Some(syn::parse2(crate::expand::expression(&syn::parse2::<
+                        Expression,
+                    >(
+                        tokens
+                    )?))?)
                 } else {
                     None
                 };
-                if !header.is_empty() {
-                    return Err(header.error("expected a Rust pattern and optional if guard"));
-                }
+                content.parse::<Token![=>]>()?;
                 arms.push(Arm {
                     pattern,
                     guard,
-                    body: input.parse()?,
+                    body: content.parse()?,
                 });
+                if !content.is_empty() {
+                    content.parse::<Token![,]>()?;
+                }
             }
             ControlKind::Match { value, arms }
-        } else {
-            return Err(input.error("expected @if (...) or @match (...); use when: condition, handler for conditional methods"));
         };
-        Ok(Self {
-            span: at.span,
-            kind,
-        })
+        Ok(Self { span, kind })
     }
 }
 
-impl Parse for Body {
+impl Parse for Branch {
     fn parse(input: ParseStream) -> Result<Self> {
-        let mut sections = Vec::new();
-        loop {
-            if input.peek(token::Brace) {
-                sections.push(Section::Attributes(attribute_block(input)?));
-            } else if input.peek(token::Bracket) {
-                let content;
-                bracketed!(content in input);
-                sections.push(Section::Children(content.parse()?));
-                if !content.is_empty() {
-                    return Err(content.error("unexpected control marker outside a control block"));
-                }
-            } else {
-                break;
+        if input.peek(Token![^]) {
+            input.parse::<Token![^]>()?;
+            let content;
+            parenthesized!(content in input);
+            let expression = content.parse()?;
+            if !content.is_empty() {
+                return Err(content.error("expected one UIM expression inside ^(...)"));
             }
+            Ok(Self::Value(expression))
+        } else {
+            Ok(Self::Mapping(input.parse()?))
         }
-        Ok(Self(sections))
+    }
+}
+
+impl Parse for Section {
+    fn parse(input: ParseStream) -> Result<Self> {
+        if input.peek(token::Brace) {
+            let content;
+            braced!(content in input);
+            Ok(Self::Attributes(content.parse()?))
+        } else if input.peek(token::Bracket) {
+            let content;
+            bracketed!(content in input);
+            Ok(Self::Children(content.parse()?))
+        } else {
+            Err(input.error(
+                "expected an attribute block {...}, children block [...], or value branch ^(...)",
+            ))
+        }
     }
 }
 
 impl Parse for Children {
     fn parse(input: ParseStream) -> Result<Self> {
         let mut children = Vec::new();
-        while !input.is_empty() && !at_boundary(input) {
-            children.push(if input.peek(Token![@]) {
-                Child::Control(Box::new(input.parse()?))
+        while !input.is_empty() {
+            children.push(if control_ahead(input) {
+                let expression: Expression = input.parse()?;
+                match expression {
+                    Expression {
+                        head: Head::Value(Value::Control(control)),
+                        suffixes,
+                    } if control.is_mapping() && suffixes.is_empty() => Child::Control(control),
+                    expression => Child::Element {
+                        spread: None,
+                        expression,
+                    },
+                }
+            } else if input.peek(token::Brace) || input.peek(token::Bracket) {
+                Child::Group(input.parse()?)
             } else {
                 Child::Element {
                     spread: input.parse()?,
                     expression: input.parse()?,
                 }
             });
-            if input.peek(Token![,]) {
-                input.parse::<Token![,]>()?;
-            } else if !input.is_empty() && !at_boundary(input) {
-                return Err(input.error("expected , between children"));
+            if !input.is_empty() {
+                input.parse::<Token![,]>().map_err(|_| {
+                    input.error("expected , between children; use . before a mapping block")
+                })?;
             }
         }
         Ok(Self(children))
     }
 }
 
-// Arguments share the expression parser, including closures and value controls.
 fn arguments(input: ParseStream) -> Result<Vec<Expression>> {
     let mut args = Vec::new();
-    while !input.is_empty() && !input.peek(Token![;]) && !at_boundary(input) {
+    while !input.is_empty() && !input.peek(Token![;]) {
         args.push(input.parse()?);
-        if !input.is_empty() && !input.peek(Token![;]) && !at_boundary(input) {
+        if !input.is_empty() && !input.peek(Token![;]) {
             input.parse::<Token![,]>()?;
         }
     }
     Ok(args)
 }
 
-fn attribute_block(input: ParseStream) -> Result<Attributes> {
-    let content;
-    braced!(content in input);
-    let attributes = content.parse()?;
-    if !content.is_empty() {
-        return Err(content.error("unexpected control marker outside a control block"));
-    }
-    Ok(attributes)
-}
-
 impl Parse for Attributes {
     fn parse(input: ParseStream) -> Result<Self> {
         let mut attributes = Vec::new();
-        while !input.is_empty() && !at_boundary(input) {
+        while !input.is_empty() {
             attributes.push(input.parse()?);
-            if input.peek(Token![;]) {
-                input.parse::<Token![;]>()?;
-            } else if !input.is_empty() && !at_boundary(input) {
-                return Err(input.error("expected ; between attributes"));
+            if !input.is_empty() {
+                input.parse::<Token![;]>().map_err(|_| {
+                    input.error("expected ; between attributes; use . before a mapping block")
+                })?;
             }
         }
         Ok(Self(attributes))
@@ -470,15 +525,13 @@ impl Parse for Attribute {
             }
             return Ok(Self::Id(hash, input.parse()?));
         }
-        if input.peek(Token![@]) {
+        if control_ahead(input) {
             return Ok(Self::Control(Box::new(input.parse()?)));
         }
-        let method = input.parse()?;
-        if input.peek(Token![=>]) {
-            return Err(
-                input.error("=> defines a closure; use method: { ... } or method: move { ... }")
-            );
+        if input.peek(token::Brace) || input.peek(token::Bracket) {
+            return Ok(Self::Group(input.parse()?));
         }
+        let method = input.parse()?;
         if input.peek(Token![:]) {
             input.parse::<Token![:]>()?;
             Ok(Self::Method(method, arguments(input)?))
@@ -490,11 +543,10 @@ impl Parse for Attribute {
 
 impl Mapper {
     fn block(input: ParseStream) -> Result<Self> {
-        let span = input.span();
         Ok(Self {
-            span,
+            span: input.span(),
             capture: input.parse()?,
-            attributes: attribute_block(input)?,
+            section: input.parse()?,
         })
     }
 }
@@ -507,7 +559,7 @@ impl Parse for Mapper {
             Ok(Self {
                 span: input.span(),
                 capture: None,
-                attributes: input.parse()?,
+                section: Section::Attributes(input.parse()?),
             })
         }
     }
@@ -518,39 +570,56 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rejects_incomplete_calls_invalid_attributes_and_bad_separators() {
+    fn rejects_old_syntax_and_incomplete_v2_forms() {
         for source in [
             "",
             ".",
             "~",
+            "&mut",
+            "!",
             "#div",
             "List()",
             "(1, 2)",
             "(1;).f",
             "(,1).f",
             "(1,,2).f",
-            ".div { flex gap: 1 }",
-            ".div { # \"id\" gap: 1 }",
-            ".div { #? }",
-            ".div { #? move }",
-            ".div { #?? \"id\" }",
-            ".div { flex;; }",
-            ".div [a b]",
-            ".div [a,,b]",
-            ".div [..]",
+            ".div { flex }",
+            ".div [a]",
+            ".div.{ flex gap: 1 }",
+            ".div.{ flex;; }",
+            ".div.[a b]",
+            ".div.[a,,b]",
+            ".div.[..]",
             ".div,",
-            ".div { @true }",
-            ".div { @true: a, b }",
-            ".div { map => {} }",
-            "-$value",
-            "-\"text\"",
+            ".div.{ #? }",
+            ".div.{ #? move }",
+            ".div.{ #?? x }",
             "f! value",
             "$(1 +)",
             "() =>",
             "move (a,) =>",
             "(,a) => a",
-            "(a,,b) => a",
             "move value",
+            "@if (true) a @else b @end",
+            "@(a,,b)",
+            "@(a; b)",
+            "^(x)",
+            "if ready ^a else ^b",
+            "if ready ^(a)",
+            "if ready ^() else ^(a)",
+            "if ready ^(a, b) else ^(c)",
+            "if ready ^(a) else ^(b) else ^(c)",
+            "if ready ^(a) else {}",
+            "match x { _ => ^(a) }",
+            "match x ^(_ => ^(a) _ => ^(b))",
+            "match x ^(_ => a)",
+            ".div.{ {flex} flex_col }",
+            ".div.[[a]; b]",
+            "task->",
+            "task->()",
+            "task->priority()",
+            "task->-1",
+            "task->1.5",
         ] {
             assert!(
                 syn::parse_str::<Expression>(source).is_err(),
@@ -560,25 +629,31 @@ mod tests {
     }
 
     #[test]
-    fn errors_explain_call_and_rust_boundaries() {
-        let error = syn::parse_str::<Expression>("(a, b)").err().unwrap();
-        assert!(
-            error
-                .to_string()
-                .contains(".callable after an argument list")
-        );
-        let error = syn::parse_str::<Expression>("value { flex } trailing")
-            .err()
-            .unwrap();
-        assert!(
-            error
-                .to_string()
-                .contains("expected .callable, a block, or a separator")
-        );
+    fn accepts_v2_boundaries_and_nested_controls() {
+        for source in [
+            ".div.{}.[]",
+            "@(a)",
+            "@()",
+            "@(1.px, ~label)",
+            "&mut v.f",
+            "!-v.f",
+            "move [~label]",
+            ".div.{ {flex; {gap: 1}}; flex_col }. [[a], b]",
+            "if ready ^(.div) else ^(.div).decorate",
+            "if let Some(x) = value ^(x) else ^(fallback)",
+            "match &value ^(Some(x) if $(x > 0) => ^(x), _ => ^(fallback),)",
+            "match a ^(A => ^(match b ^(B => ^(x), _ => ^(z))), _ => ^(y))",
+            ".div.[if ready [a] else [b], match x ^(_ => [c]), [d]]",
+            ".div.{ if flag.check { flex }; match value ^(_ => { gap: 1 }) }",
+            "if ready { flex } else { flex_col }",
+        ] {
+            syn::parse_str::<Expression>(source)
+                .unwrap_or_else(|e| panic!("rejected {source}: {e}"));
+        }
     }
 
     #[test]
-    fn mappers_require_complete_blocks_and_attribute_separators() {
+    fn mappers_require_complete_blocks_and_separators() {
         for source in [
             "move",
             "move {} extra",
@@ -587,59 +662,24 @@ mod tests {
             "#",
             "#?",
             "#? move",
-            "@true =>",
         ] {
             assert!(
                 syn::parse_str::<Mapper>(source).is_err(),
-                "accepted invalid mapper: {source}"
+                "accepted mapper: {source}"
             );
         }
         for source in [
             "",
             "flex;",
             "move {}",
-            "# \"id\"; when: true, move { flex }",
-            "# \"id\"; #? \"selector\" { into }; flex",
-            "#? move format!(\"task-{id}\"); gap: 1",
+            "move []",
+            "{flex}; gap: 1",
+            "#? move format!(\"task\"); gap: 1",
         ] {
             assert!(
                 syn::parse_str::<Mapper>(source).is_ok(),
                 "rejected mapper: {source}"
             );
         }
-    }
-
-    #[test]
-    fn rejects_unbalanced_controls_and_wrong_branch_shapes() {
-        for source in [
-            "@if (true) a @end",
-            "@if (true) @else b @end",
-            "@if (true) a @else b",
-            "@if (true) a @else b @else c @end",
-            "@if true a @else b @end",
-            "@if (true) a, b @else c @end",
-            "@if (true) a @case (_) b @end",
-            "@match (x) @else a @end",
-            "@match (x) @case (_) => a @end",
-            "@match (x) @case (_) a, b @end",
-            "@end",
-            "@case (_) a",
-            "@unknown (x)",
-            ".div { @else flex }",
-            ".div [@end]",
-            ".div { @if (true) flex }",
-            ".div [@if (true) a]",
-            ".div [@if (true) a @end b]",
-            ".div { @if (true) flex @end gap: 1 }",
-        ] {
-            assert!(
-                syn::parse_str::<Expression>(source).is_err(),
-                "accepted invalid control: {source}"
-            );
-        }
-        let error = syn::parse_str::<Expression>("@if (true) a @end")
-            .err()
-            .unwrap();
-        assert!(error.to_string().contains("requires @else"));
     }
 }

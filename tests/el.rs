@@ -167,13 +167,13 @@ fn builds_the_documented_tree_in_source_order() {
     let condition = true;
     let rest = ["first", "second"];
     let actual = ui! {
-        .List::new {
+        .List::new.{
             flex;
             flex_col;
             gap: 8.0.px;
-            when: condition, $|x| x.child("dynamic");
-        } [
-            "confirm".Button::with_label {
+            when: condition, $(|x| x.child("dynamic"));
+        }.[
+            "confirm".Button::with_label.{
                 label: "确定"
             },
             ..rest,
@@ -200,19 +200,19 @@ fn accepts_empty_and_omitted_sections() {
     let elements = [
         ui! { .List::new },
         ui! { ().List::new },
-        ui! { .List::new {} },
-        ui! { .List::new [] },
-        ui! { .List::new {} [] },
-        ui! { ().List::new {} },
-        ui! { ().List::new [] },
-        ui! { ().List::new {} [] },
+        ui! { .List::new.{} },
+        ui! { .List::new.[] },
+        ui! { .List::new.{}.[] },
+        ui! { ().List::new.{} },
+        ui! { ().List::new.[] },
+        ui! { ().List::new.{}.[] },
     ];
 
     for element in elements {
         assert_eq!(element, List::new());
     }
-    assert_eq!(ui! { .List::new { flex; } }, List::new().flex());
-    assert_eq!(ui! { ().List::new { flex } }, List::new().flex());
+    assert_eq!(ui! { .List::new.{ flex; } }, List::new().flex());
+    assert_eq!(ui! { ().List::new.{ flex } }, List::new().flex());
 }
 
 #[test]
@@ -221,7 +221,7 @@ fn supports_constructor_arguments_and_qualified_paths() {
 
     let a = 3;
     let b = 5;
-    let element = ui! { (a, b).List::new { flex } };
+    let element = ui! { (a, b).List::new.{ flex } };
     assert_eq!(element.0.calls, ["new(3, 5)", "flex"]);
     assert_eq!(
         ui! { (1, 2,).argument_list::List::new }.0.calls,
@@ -229,7 +229,7 @@ fn supports_constructor_arguments_and_qualified_paths() {
     );
     assert_eq!(ui! { .widgets::List::new }.calls, ["new"]);
     assert_eq!(
-        ui! { ("ok",).widgets::Button::with_label [] }.calls,
+        ui! { ("ok",).widgets::Button::with_label.[] }.calls,
         ["with_label(ok)"]
     );
 }
@@ -237,15 +237,15 @@ fn supports_constructor_arguments_and_qualified_paths() {
 #[test]
 fn supports_each_constructor_form_in_nested_children() {
     let element = ui! {
-        .List::new [
+        .List::new.[
             .List::new,
             ().List::new,
-            .List::new {},
-            .List::new [],
-            .widgets::List::new {} [],
-            (1, 2).argument_list::List::new { gap: 2.0.px },
-            "ok".widgets::Button::with_label [
-                .List::new { flex } ["grandchild"]
+            .List::new.{},
+            .List::new.[],
+            .widgets::List::new.{}.[],
+            (1, 2).argument_list::List::new.{ gap: 2.0.px },
+            "ok".widgets::Button::with_label.[
+                .List::new.{ flex }.["grandchild"]
             ]
         ]
     };
@@ -267,13 +267,13 @@ fn supports_each_constructor_form_in_nested_children() {
 #[test]
 fn preserves_rust_expressions_and_closure_commas_in_attributes() {
     let element = ui! {
-        .List::new {
+        .List::new.{
             pair: $(1, 2);
             set_pair: 3, 4,;
-            on_click: $|event, window, context| {
-                let _ = (event, window, context);
-            };
-            map: $|element| element.label(concat!("con", "firm"))
+            on_click: $(|event, window, context| {
+                    let _ = (event, window, context);
+            });
+            map: $(|element| element.label(concat!("con", "firm")))
         }
     };
 
@@ -302,14 +302,14 @@ fn applies_conditions_without_running_disabled_builders() {
     let disabled = false;
     let moved_child = String::from("moved");
     let element = ui! {
-        .List::new {
-            when: disabled, $|element| {
-                skipped.set(skipped.get() + 1);
-                element.child("hidden")
-            };
-            when: $conditions::ENABLED && !disabled, $|element| element.child("enabled");
-            when: $conditions::enabled::<u8, u16>(), $move |element| element.child(moved_child)
-        } ["last"]
+        .List::new.{
+            when: disabled, $(|element| {
+                    skipped.set(skipped.get() + 1);
+                    element.child("hidden")
+            });
+            when: $(conditions::ENABLED && !disabled), $(|element| element.child("enabled"));
+            when: $(conditions::enabled::<u8, u16>()), $(move |element| element.child(moved_child))
+        }.["last"]
     };
 
     assert_eq!(skipped.get(), 0);
@@ -339,15 +339,15 @@ fn when_mappers_support_dsl_values_rust_conditions_and_move_captures() {
     let value = 8.0;
     let owned = String::from("moved");
     let element = ui! {
-        .List::new {
+        .List::new.{
             when: conditions::ENABLED, {
                 flex;
                 when: disabled.invert, { gap: value.px };
             };
-            when: $conditions::enabled::<u8, u16>() && !disabled, move { child: owned };
+            when: $(conditions::enabled::<u8, u16>() && !disabled), move { child: owned };
             when: true, {};
             when: true, move {}
-        } ["last"]
+        }.["last"]
     };
     assert_eq!(element.calls, ["new", "flex", "gap(8)"]);
     assert_eq!(
@@ -366,12 +366,12 @@ fn when_mappers_evaluate_conditions_once_and_skip_inactive_blocks() {
     };
 
     let element = List::new().map(gds_uim::m! {
-        when: $evaluate(false), {
-            when: $evaluate(true), { gap: ${ attributes.set(100); 0.0 } };
-        };
-        when: $(evaluate(true)), {
-            gap: ${ attributes.set(attributes.get() + 1); 6.0 };
-        };
+            when: $(evaluate(false)), {
+                when: $(evaluate(true)), { gap: $({ attributes.set(100); 0.0 }) };
+            };
+            when: $(evaluate(true)), {
+                gap: $({ attributes.set(attributes.get() + 1); 6.0 });
+            };
     });
     assert_eq!(conditions.get(), 2);
     assert_eq!(attributes.get(), 1);
@@ -382,15 +382,15 @@ fn when_mappers_evaluate_conditions_once_and_skip_inactive_blocks() {
 fn mixes_spreads_with_expression_children() {
     let dynamic = String::from("dynamic");
     let element = ui! {
-        .List::new [
+        .List::new.[
             "first",
-            ..$std::iter::empty::<&str>(),
-            ..$["second", "third"].into_iter().map(String::from),
+            ..$(std::iter::empty::<&str>()),
+            ..$(["second", "third"].into_iter().map(String::from)),
             $(dynamic),
             $({ String::from("block") }),
             $(if true { "conditional" } else { "unreachable" }),
             $(concat!("mac", "ro")),
-            ..$std::iter::once("last")
+            ..$(std::iter::once("last"))
         ]
     };
 
@@ -421,12 +421,12 @@ fn grouped_control_flow_and_indexing_are_rust_children() {
         };
         let expected = if selected { "selected" } else { "other" };
         let element = ui! {
-            .List::new {
-                label: $match selected { true => "selected", false => "other" };
-            } [
+            .List::new.{
+                label: $(match selected { true => "selected", false => "other" });
+            }.[
                 $(match selected {
-                    true => "selected",
-                    false => "other",
+                        true => "selected",
+                        false => "other",
                 }),
                 $(labels[index()]),
                 $(if selected { "selected" } else { "other" }),
@@ -448,11 +448,11 @@ fn grouped_match_can_be_followed_by_dsl_stages() {
     let finish = |element: List| element.flex_col();
     let selected = Some(List::new());
     let element = ui! {
-        .List::new [
+        .List::new.[
             $(match selected {
-                Some(element) => element,
-                None => panic!("unselected branch must not run"),
-            }) { label: "match"; } ["child"].finish { gap: 4.0.px; },
+                    Some(element) => element,
+                    None => panic!("unselected branch must not run"),
+            }).{ label: "match"; }.["child"].finish.{ gap: 4.0.px; },
         ]
     };
 
@@ -497,30 +497,30 @@ fn preserves_temporary_borrows_across_children_and_spreads() {
     }
 
     let text = ui! {
-        $(&String::from("constructor")).borrowed ["child"]
+        $(&String::from("constructor")).borrowed.["child"]
     }
     .into_string();
     assert_eq!(text, "constructor/child");
 
     let text = ui! {
-        $(&String::from("empty-attributes")).borrowed {} ["child"]
+        $(&String::from("empty-attributes")).borrowed.{}.["child"]
     }
     .into_string();
     assert_eq!(text, "empty-attributes/child");
 
     let text = ui! {
-        .Borrowed::new [
-            $String::from("child").as_str(),
-            ..$[String::from("spread").as_str()],
+        .Borrowed::new.[
+            $(String::from("child").as_str()),
+            ..$([String::from("spread").as_str()]),
         ]
     }
     .into_string();
     assert_eq!(text, "child/spread");
 
     let text = ui! {
-        .Borrowed::new {} [
-            $String::from("child").as_str(),
-            ..$[String::from("spread").as_str()],
+        .Borrowed::new.{}.[
+            $(String::from("child").as_str()),
+            ..$([String::from("spread").as_str()]),
         ]
     }
     .into_string();
@@ -537,12 +537,12 @@ fn evaluates_constructors_attributes_and_spreads_once() {
     };
 
     let element = ui! {
-        $({ assert_eq!(evaluate(), 0); List::new() }) {
-            gap: $evaluate() as f32;
-            when: $evaluate() == 2, { child: "condition" };
-        } [
-            ..$std::iter::once({ assert_eq!(evaluate(), 3); "spread" }),
-            $({ assert_eq!(evaluate(), 4); List::new() }) { flex } ["nested"]
+        $({ assert_eq!(evaluate(), 0); List::new() }).{
+            gap: $(evaluate() as f32);
+            when: $(evaluate() == 2), { child: "condition" };
+        }.[
+            ..$(std::iter::once({ assert_eq!(evaluate(), 3); "spread" })),
+            $({ assert_eq!(evaluate(), 4); List::new() }).{ flex }.["nested"]
         ]
     };
 
@@ -576,7 +576,7 @@ fn preserves_type_changing_builder_methods() {
     }
 
     let element: Stateful = ui! {
-        .List::new { map: Stateful; label: "stateful" } ["child", ..$["rest"]]
+        .List::new.{ map: Stateful; label: "stateful" }.["child", ..$(["rest"])]
     };
     assert_eq!(element.0.calls, ["new", "label(stateful)"]);
     assert_eq!(element.0.children.len(), 2);
@@ -590,10 +590,10 @@ fn dollar_expressions_accept_factories_fields_and_existing_values() {
     let holder = Holder { child: List::new() };
     let factory = || List::new();
     let element = ui! {
-        $factory().flex() { gap: 8.0.px } [
-            $Button::with_label("confirm") { label: "确定" },
-            $holder.child { flex_col },
-            $(factory()) [],
+        $(factory().flex()).{ gap: 8.0.px }.[
+            $(Button::with_label("confirm")).{ label: "确定" },
+            $(holder.child).{ flex_col },
+            $(factory()).[],
         ]
     };
 
@@ -608,13 +608,13 @@ fn dollar_expressions_accept_factories_fields_and_existing_values() {
     );
 
     let existing = List::new();
-    assert_eq!(ui! { $existing }, List::new());
+    assert_eq!(ui! { $(existing) }, List::new());
     for element in [
-        ui! { $factory() },
-        ui! { $factory() {} },
-        ui! { $(factory()) [] },
-        ui! { $factory() {} [] },
-        ui! { $widgets::List::new() },
+        ui! { $(factory()) },
+        ui! { $(factory()).{} },
+        ui! { $(factory()).[] },
+        ui! { $(factory()).{}.[] },
+        ui! { $(widgets::List::new()) },
     ] {
         assert_eq!(element, List::new());
     }
@@ -639,11 +639,11 @@ fn dollar_expressions_preserve_generics_and_grouped_rust_syntax() {
 
     let enabled = true;
     let element = ui! {
-        .List::new [
-            $factory::<u8, u16>(),
-            $factory::<Vec<Vec<u8>>, Vec<(u32, u64)>>() { flex },
-            $<List as Factory>::make(),
-            $(if enabled { List::new() } else { List::new().flex() }) { flex_col },
+        .List::new.[
+            $(factory::<u8, u16>()),
+            $(factory::<Vec<Vec<u8>>, Vec<(u32, u64)>>()).{ flex },
+            $(<List as Factory>::make()),
+            $(if enabled { List::new() } else { List::new().flex() }).{ flex_col },
             $(["indexed"][0]),
         ]
     };
@@ -670,11 +670,11 @@ fn dollar_expressions_are_evaluated_once_in_source_order() {
     let enabled = true;
 
     let element = ui! {
-        $ factory(0).flex() {
-            gap: ${ factory(1); px(8.0) };
-        } [
-            $ factory(2) { label: "nested" } [$ factory(3)],
-            ..$std::iter::once({ factory(4); "spread" }),
+        $ (factory(0).flex()).{
+            gap: $({ factory(1); px(8.0) });
+        }.[
+            $ (factory(2)).{ label: "nested" }.[$ (factory(3))],
+            ..$(std::iter::once({ factory(4); "spread" })),
             $ (if enabled { factory(5) } else { unreachable!() }),
         ]
     };
@@ -697,12 +697,12 @@ fn postfix_calls_accept_optional_arguments_sections_and_module_paths() {
     for element in [
         ui! { .factory },
         ui! { ().factory },
-        ui! { .factory {} },
-        ui! { .factory [] },
-        ui! { .factory {} [] },
-        ui! { ().factory {} },
-        ui! { ().factory [] },
-        ui! { ().factory {} [] },
+        ui! { .factory.{} },
+        ui! { .factory.[] },
+        ui! { .factory.{}.[] },
+        ui! { ().factory.{} },
+        ui! { ().factory.[] },
+        ui! { ().factory.{}.[] },
         ui! { .widgets::List::new },
         ui! { ().widgets::List::new },
     ] {
@@ -712,14 +712,14 @@ fn postfix_calls_accept_optional_arguments_sections_and_module_paths() {
     let existing = List::new().label("existing");
     let condition = true;
     let element = ui! {
-        .factory { flex; when: condition, $|list| list.child("condition") } [
+        .factory.{ flex; when: condition, $(|list| list.child("condition")) }.[
             .factory,
             ().factory,
-            .widgets::List::new { flex_col },
-            ("factory",).Button::with_label { label: "确定" },
+            .widgets::List::new.{ flex_col },
+            ("factory",).Button::with_label.{ label: "确定" },
             "constructor".Button::with_label,
-            $existing,
-            ..$["spread"],
+            $(existing),
+            ..$(["spread"]),
         ]
     };
     assert_eq!(element.calls, ["new", "flex"]);
@@ -748,11 +748,11 @@ fn postfix_calls_preserve_type_const_and_lifetime_arguments() {
     }
 
     let element = ui! {
-        .factory::<u8, 3> [
+        .factory::<u8, 3>.[
             .factory::<u16, 4>,
             ().factory::<Vec<Vec<u8>>, 5>,
-            .factory::<fn(i32) -> i32, 6> { flex },
-            ().factory::<fn(i32) -> i32, 7> { flex_col },
+            .factory::<fn(i32) -> i32, 6>.{ flex },
+            ().factory::<fn(i32) -> i32, 7>.{ flex_col },
             ("lifetime").borrowed::<'static>,
         ]
     };
@@ -781,9 +781,9 @@ fn postfix_calls_consume_move_only_values_once_in_source_order() {
     let once = || List::new().child(owned);
 
     let element = ui! {
-        (0, $String::from("root")).factory { flex } [
-            (1, $String::from("nested")).factory [.once],
-            ..$std::iter::once({ assert_eq!(calls.get(), 2); "spread" }),
+        (0, $(String::from("root"))).factory.{ flex }.[
+            (1, $(String::from("nested"))).factory.[.once],
+            ..$(std::iter::once({ assert_eq!(calls.get(), 2); "spread" })),
         ]
     };
 
@@ -822,9 +822,9 @@ fn distinguishes_dsl_application_from_rust_fields_and_calculations() {
     // The macro's own local builder bindings must not capture this variable.
     let element = 7.0;
     let actual = ui! {
-        .List::new {
+        .List::new.{
             gap: a.b;
-            gap: $raw.b;
+            gap: $(raw.b);
             gap: $(raw.b + 1.0).px.units::double;
             gap: -3.5.px.offset::<Vec<Vec<u8>>, fn(i32, i32) -> i32, 2>;
             gap: element;
@@ -862,13 +862,13 @@ fn suffixes_wrap_complete_trees_and_preserve_wrapper_types() {
 
     let existing = List::new().label("existing");
     let actual = ui! {
-        .widgets::List::new { flex; } [
-            "child".Button::with_label ["nested"].frame {
+        .widgets::List::new.{ flex; }.[
+            "child".Button::with_label.["nested"].frame.{
                 label: "wrapper";
             }.finish,
             $(existing).identity::<List>,
-            ..$std::iter::once("spread"),
-        ].frame { label: "root"; }.finish
+            ..$(std::iter::once("spread")),
+        ].frame.{ label: "root"; }.finish
     };
     assert_eq!(
         actual.calls,
@@ -916,13 +916,13 @@ fn macro_suffixes_map_complete_trees_and_support_type_changing_chains() {
     }
 
     let actual = ui! {
-        .List::new ["first"]
-            .mapping! { child: "second"; map: $frame }
-            .gds_uim::m! { label: "mapped wrapper" }
-            { label: "configured wrapper" }
-            .finish
-            .::gds_uim::m![flex]
-            ["third"]
+        .List::new.["first"]
+        .mapping! { child: "second"; map: $frame }
+        .gds_uim::m! { label: "mapped wrapper" }
+        .{ label: "configured wrapper" }
+        .finish
+        .::gds_uim::m![flex]
+        .["third"]
     };
     assert_eq!(
         actual.calls,
@@ -966,8 +966,8 @@ fn macro_suffixes_evaluate_the_input_and_callable_once_in_order() {
     let label = String::from("captured");
     let actual = ui! {
         $({ events.borrow_mut().push("element"); List::new() })
-            .record!(events, payload)
-            .gds_uim::m!(move { label: $label.as_str() })
+        .record!(events, payload)
+        .gds_uim::m!(move { label: $(label.as_str()) })
     };
     assert_eq!(
         *events.borrow(),
@@ -991,10 +991,10 @@ fn macro_suffixes_work_in_children_values_and_constructor_arguments() {
     }
 
     let actual = ui! {
-        .List::new {
+        .List::new.{
             gap: 3.0.twice!().px;
-            owned_pair: .List::new.gds_uim::m! { flex }.label, $"right".to_owned();
-        } [
+            owned_pair: .List::new.gds_uim::m! { flex }.label, $("right".to_owned());
+        }.[
             (.List::new.gds_uim::m! { label: "argument" }).identity,
             .List::new.gds_uim::m! { label: "child" },
         ]
@@ -1027,14 +1027,14 @@ fn multiple_arguments_and_fn_once_suffixes_are_evaluated_once_in_order() {
         value
     };
     let actual = ui! {
-        .List::new {
-            owned_pair: $evaluate(0).to_string(), $evaluate(1).to_string();
+        .List::new.{
+            owned_pair: $(evaluate(0).to_string()), $(evaluate(1).to_string());
             set_pair: $(evaluate(2)), $(evaluate(3)),;
             gap: 6.0.once;
             pair: $(7, 8);
-            on_click: $|event, window, context| {
-                let _ = (event, window, context);
-            }
+            on_click: $(|event, window, context| {
+                    let _ = (event, window, context);
+            })
         }
     };
     assert_eq!(calls.get(), 5);
@@ -1070,8 +1070,8 @@ fn debug_selectors_defer_expressions_and_support_borrowed_and_move_captures() {
     let calls = Cell::new(0);
     let label = String::from("borrowed");
     let selector = ui! {
-        Debuggable {
-            #? $({ calls.set(calls.get() + 1); &label }) { to_string };
+        Debuggable.{
+            #? $({ calls.set(calls.get() + 1); &label }).{ to_string };
         }
     };
     assert_eq!(calls.get(), 0);
@@ -1081,7 +1081,7 @@ fn debug_selectors_defer_expressions_and_support_borrowed_and_move_captures() {
 
     let selector = {
         let id = String::from("owned");
-        ui! { Debuggable { #? move format!("task-{id}") } }
+        ui! { Debuggable.{ #? move format!("task-{id}") } }
     };
     assert_eq!(selector(), "task-owned");
 
@@ -1089,7 +1089,7 @@ fn debug_selectors_defer_expressions_and_support_borrowed_and_move_captures() {
         builder(Debuggable)
     }
 
-    let selector = configure(gds_uim::m! { #? "mapped" { into } });
+    let selector = configure(gds_uim::m! { #? "mapped".{ into } });
     assert_eq!(selector(), "mapped");
 }
 
@@ -1102,15 +1102,15 @@ fn map_closures_share_attributes_conditions_and_value_syntax() {
     let enabled = true;
     let skipped = Cell::new(0);
     let actual = ui! {
-        .List::new {
-            map: $mapping! {
-                flex;
-                gap: value.px;
-                set_pair: 1, 2;
-                pair: $(3, 4);
-                when: enabled, $mapping! { label: "selected" };
-                when: false, $mapping! { gap: ${ skipped.set(skipped.get() + 1); 100.0 } };
-            };
+        .List::new.{
+            map: $(mapping! {
+                    flex;
+                    gap: value.px;
+                    set_pair: 1, 2;
+                    pair: $(3, 4);
+                    when: enabled, $mapping! { label: "selected" };
+                    when: false, $mapping! { gap: ${ skipped.set(skipped.get() + 1); 100.0 } };
+            });
         }
     };
     assert_eq!(skipped.get(), 0);
@@ -1138,12 +1138,12 @@ fn map_closures_defer_values_and_preserve_borrowed_captures() {
     let mut next = 0;
     {
         let mut builder = deferred(gds_uim::m! {
-            gap: ${
-                calls.set(calls.get() + 1);
-                next += 1;
-                next as f32
-            };
-            label: $label.as_str();
+                gap: $({
+                        calls.set(calls.get() + 1);
+                        next += 1;
+                        next as f32
+                });
+                label: $(label.as_str());
         });
         assert_eq!(calls.get(), 0);
         assert_eq!(
@@ -1174,7 +1174,7 @@ fn map_closures_support_move_captures_empty_bodies_and_type_changes() {
         List::new().map(owned_builder()).calls,
         ["new", "owned_pair(left, right)"]
     );
-    let wrapped: Option<List> = List::new().map(gds_uim::m! { map: $Some });
+    let wrapped: Option<List> = List::new().map(gds_uim::m! { map: $(Some) });
     assert_eq!(wrapped, Some(List::new()));
 }
 
@@ -1184,20 +1184,20 @@ fn bare_mapper_values_compose_nested_mappings_and_preserve_types() {
     let value = 9.0;
     let calls = Cell::new(0);
     let actual = ui! {
-        .List::new {
+        .List::new.{
             label: "before";
             map: {
                 flex;
                 map: {
                     gap: value.px;
-                    set_pair: ${ calls.set(calls.get() + 1); 1 }, 2;
-                    when: true, $gds_uim::m! { label: "nested" };
+                    set_pair: $({ calls.set(calls.get() + 1); 1 }), 2;
+                    when: true, $(gds_uim::m! { label: "nested" });
                 };
                 label: "after";
             };
             map: {};
             map: move {}
-        } ["child"]
+        }.["child"]
     };
     assert_eq!(calls.get(), 1);
     assert_eq!(
@@ -1214,7 +1214,7 @@ fn bare_mapper_values_compose_nested_mappings_and_preserve_types() {
     );
     assert_eq!(actual.children, [Child::Text("child".into())]);
 
-    let wrapped: Option<List> = ui! { .List::new { map: { map: $Some } } };
+    let wrapped: Option<List> = ui! { .List::new.{ map: { map: $(Some) } } };
     assert_eq!(wrapped, Some(List::new()));
 }
 
@@ -1232,10 +1232,10 @@ fn bare_move_mappers_own_captures_and_defer_evaluation() {
         let record = calls.clone();
         let label = String::from("owned");
         ui! {
-            $(Deferred) {
+            $(Deferred).{
                 defer: move {
-                    gap: ${ record.set(record.get() + 1); 12.0 };
-                    label: $label.as_str()
+                    gap: $({ record.set(record.get() + 1); 12.0 });
+                    label: $(label.as_str())
                 }
             }
         }
@@ -1261,7 +1261,7 @@ fn unified_expressions_support_values_tuples_and_callable_expressions() {
     }
     let existing = List::new();
     assert_eq!(
-        ui! { existing { flex } ["child"] },
+        ui! { existing.{ flex }.["child"] },
         List::new().flex().child("child")
     );
     assert_eq!(ui! { "ok".Button::with_label }, Button::with_label("ok"));
@@ -1293,10 +1293,10 @@ fn macros_are_values_with_all_delimiters_and_qualified_paths() {
         };
     }
     let actual = ui! {
-        node! {} { flex } [
+        node! {}.{ flex }.[
             concat!("a", "b"),
             format!["{}", 42],
-            node!() { label: "macro child" },
+            node!().{ label: "macro child" },
             ..vec!["last"],
         ].mapping! { gap: 3.0.px }
     };
@@ -1356,12 +1356,12 @@ fn computed_multi_argument_callable_runs_before_inputs_once() {
             $({ log.borrow_mut().push("left"); String::from("left") }),
             $({ log.borrow_mut().push("right"); String::from("right") }),
         ).$({
-            log.borrow_mut().push("callable");
-            move |left: String, right: String| {
-                log.borrow_mut().push("call");
-                drop(payload);
-                left + &right
-            }
+                log.borrow_mut().push("callable");
+                move |left: String, right: String| {
+                    log.borrow_mut().push("call");
+                    drop(payload);
+                    left + &right
+                }
         })
     };
     assert_eq!(actual, "leftright");
@@ -1409,7 +1409,7 @@ fn macro_factories_coerce_and_reborrow_mutable_contexts() {
     assert_eq!(ui! { cx.t!() }, "tabs");
     let calls = Cell::new(0);
     let title = ui! {
-        cx.t!({ calls.set(calls.get() + 1); calls.get() }).heading { flex }
+        cx.t!({ calls.set(calls.get() + 1); calls.get() }).heading.{ flex }
     };
     assert_eq!(title.calls, ["new", "label(tabs: 1)", "flex"]);
     assert_eq!(calls.get(), 1);
@@ -1450,14 +1450,14 @@ fn id_shorthand_preserves_type_changes_and_works_in_mappers() {
             List::new().label(id)
         }
     }
-    let actual = ui! { Unnamed { # "named"; flex } ["child"] };
-    let explicit = ui! { Unnamed { id: "named"; flex } ["child"] };
+    let actual = ui! { Unnamed.{ # "named"; flex }.["child"] };
+    let explicit = ui! { Unnamed.{ id: "named"; flex }.["child"] };
     assert_eq!(actual, explicit);
     let mapped = ui! { Unnamed.gds_uim::m! { # concat!("map", "ped"); flex_col } };
     assert_eq!(mapped.calls, ["new", "label(mapped)", "flex_col"]);
     assert_eq!(
         ui! { Unnamed.gds_uim::m! { # "mapped"; flex_col } },
-        ui! { Unnamed { # "mapped"; flex_col } }
+        ui! { Unnamed.{ # "mapped"; flex_col } }
     );
 }
 
@@ -1469,10 +1469,10 @@ fn iterator_method_blocks_and_rust_spreads_are_equivalent() {
         List::new().child(text)
     };
     let items = vec![String::from("a"), String::from("b")];
-    let from_rust = ui! { .List::new [..$(items.into_iter().map(render_item))] };
+    let from_rust = ui! { .List::new.[..$(items.into_iter().map(render_item))] };
     assert_eq!(calls.get(), 2);
     let items = vec![String::from("a"), String::from("b")];
-    let from_dsl = ui! { .List::new [..items { into_iter; map: render_item }] };
+    let from_dsl = ui! { .List::new.[..items.{ into_iter; map: render_item }] };
     assert_eq!(calls.get(), 4);
     assert_eq!(from_dsl, from_rust);
 }
@@ -1482,12 +1482,12 @@ fn conditional_handlers_are_constructed_even_when_not_called() {
     let constructed = Cell::new(0);
     let called = Cell::new(0);
     let result = ui! {
-        .List::new {
+        .List::new.{
             when: false, $({
-                constructed.set(constructed.get() + 1);
-                |node| { called.set(called.get() + 1); node }
+                    constructed.set(constructed.get() + 1);
+                    |node| { called.set(called.get() + 1); node }
             });
-            when: false, { gap: ${ called.set(100); 1.0 } };
+            when: false, { gap: $({ called.set(100); 1.0 }) };
             flex:
         }
     };
@@ -1501,8 +1501,8 @@ fn generated_names_do_not_capture_user_bindings() {
     let __uim_value = 4.0;
     let __uim_apply = |n: f32| n + 1.0;
     let actual = ui! {
-        .List::new { gap: __uim_value }
-            .$(|node| node.gap(__uim_apply(__uim_value)))
+        .List::new.{ gap: __uim_value }
+        .$(|node| node.gap(__uim_apply(__uim_value)))
     };
     assert_eq!(actual.calls, ["new", "gap(4)", "gap(5)"]);
 }
@@ -1566,12 +1566,12 @@ fn alternating_blocks_preserve_order_across_type_changes_and_suffixes() {
     let events = RefCell::new(Vec::new());
     let value = First(&events);
     let _result = ui! {
-        value { flex }
-        [$({ events.borrow_mut().push("evaluate x"); "x" }), "y"]
-        { f1; f2 }
-        ["u", "v"]
+        value.{ flex }
+        .[$({ events.borrow_mut().push("evaluate x"); "x" }), "y"]
+        .{ f1; f2 }
+        .["u", "v"]
         .some_post_process
-        ["after"] { f2 }
+        .["after"].{ f2 }
     };
     assert_eq!(
         *events.borrow(),
@@ -1590,12 +1590,12 @@ fn alternating_blocks_preserve_order_across_type_changes_and_suffixes() {
         ]
     );
 
-    let result = ui! { .List::new {} {} ["a"] ["b"] { flex } { flex_col } [] {} };
+    let result = ui! { .List::new.{}.{}.["a"].["b"].{ flex }.{ flex_col }.[].{} };
     assert_eq!(result, List::new().child("a").child("b").flex().flex_col());
     let nested = ui! {
-        .List::new [
-            .List::new ["a"] { flex } ["b"] { label: "nested" },
-        ] { flex_col }
+        .List::new.[
+            .List::new.["a"].{ flex }.["b"].{ label: "nested" },
+        ].{ flex_col }
     };
     assert_eq!(
         nested.children,
@@ -1608,31 +1608,33 @@ fn alternating_blocks_preserve_order_across_type_changes_and_suffixes() {
 
 #[test]
 fn arrow_closures_support_arity_patterns_types_and_move_captures() {
-    let make = ui! { () => .List::new { flex } };
+    let make = ui! { () => .List::new.{ flex } };
     assert_eq!(make().calls, ["new", "flex"]);
     assert_eq!(ui! { (2, 3).(a, b) => $(a + b) }, 5);
     assert_eq!(ui! { .() => "zero" }, "zero");
 
-    let configure = ui! { (node: List, width: f32) => node { gap: width } };
+    let configure = ui! { (node: List, width: f32) => node.{ gap: width } };
     assert_eq!(configure(List::new(), 4.0).calls, ["new", "gap(4)"]);
     let configured = ui! {
-        (.List::new, 7.0).(node, width) => node { gap: width }
+        (.List::new, 7.0).(node, width) => node.{ gap: width }
     };
     assert_eq!(configured.calls, ["new", "gap(7)"]);
 
     let label = String::from("owned");
-    let append = ui! { move (node: List, count: i32) => node [label, format!("{count}")] };
+    let append = ui! { move (node: List, count: i32) => node.[label, format!("{count}")] };
     assert_eq!(
         append(List::new(), 2).children,
         [Child::Text("owned".into()), Child::Text("2".into())]
     );
 
     let sums: Vec<i32> = ui! {
-        $(vec![(1, 2), (3, 4)]) { into_iter; map: ((a, b),) => $(a + b); collect }
+        $(vec![(1, 2),
+        (3, 4)]).{ into_iter; map: ((a, b),
+        ) => $(a + b); collect }
     };
     assert_eq!(sums, [3, 7]);
     let mut total = 0;
-    let mut accumulate = ui! { (a: i32, b: i32) => ${ total += a + b; } };
+    let mut accumulate = ui! { (a: i32, b: i32) => $({ total += a + b; }) };
     accumulate(2, 3);
     accumulate(4, 5);
     assert_eq!(total, 14);
@@ -1642,9 +1644,9 @@ fn arrow_closures_support_arity_patterns_types_and_move_captures() {
 fn bare_and_named_closures_compose_and_defer_their_bodies() {
     let calls = Cell::new(0);
     let actual = ui! {
-        .List::new {
-            map: node => node { flex } ["named"];
-            when: false, { gap: ${ calls.set(1); 10.0 } };
+        .List::new.{
+            map: node => node.{ flex }.["named"];
+            when: false, { gap: $({ calls.set(1); 10.0 }) };
             map: { gap: 3.0 };
         }.{ flex_col }
     };
@@ -1671,20 +1673,20 @@ fn if_fragments_are_lazy_and_preserve_sibling_and_condition_order() {
     };
     let payload = String::from("owned child");
     let actual = ui! {
-        .List::new [
+        .List::new.[
             $({ events.borrow_mut().push("before"); "before" }),
-            @if (check("first", false) || false)
+            if $(check("first", false) || false) [
                 $({ events.borrow_mut().push("wrong"); "wrong" }),
-            @else if (check("second", true) && !false)
+            ] else if $(check("second", true) && !false) [
                 payload,
-                .List::new { flex },
-                @if (check("nested", true)) "nested" @end,
-            @else if (check("skipped", true))
+                .List::new.{ flex },
+                if $(check("nested", true)) [ "nested" ],
+            ] else if $(check("skipped", true)) [
                 "wrong",
-            @else
+            ] else [
                 "wrong",
-            @end,
-            @if (check("absent", false)) "wrong" @end,
+            ],
+            if $(check("absent", false)) [ "wrong" ],
             $({ events.borrow_mut().push("after"); "after" }),
         ]
     };
@@ -1723,16 +1725,16 @@ fn if_let_children_preserve_bindings_moves_and_single_evaluation() {
         let second = second.map(String::from);
         let text = "outer";
         let actual = ui! {
-            .List::new [
-                @if (let Some(text) = evaluate(first))
+            .List::new.[
+                if $(let Some(text) = evaluate(first)) [
                     text,
-                @else if (let Some(text) = evaluate(second))
+                ] else if $(let Some(text) = evaluate(second)) [
                     text,
-                @else
+                ] else [
                     text,
-                @end,
+                ],
                 text,
-                @if (let Some(text) = None::<String>) text @end,
+                if $(let Some(text) = None::<String>) [ text ],
             ]
         };
         assert_eq!(calls.get(), evaluations);
@@ -1749,14 +1751,14 @@ fn if_let_attributes_keep_bindings_in_the_selected_branch() {
         let value = selected.map(String::from);
         let text = "outer";
         let actual = ui! {
-            .List::new {
-                @if (let Some(text) = value)
+            .List::new.{
+                if $(let Some(text) = value) {
                     child: text;
-                @else if (let Some(text) = Some(String::from("fallback")))
+                } else if $(let Some(text) = Some(String::from("fallback"))) {
                     child: text;
-                @end;
+                };
                 label: text;
-                @if (let Some(value) = None::<f32>) gap: value @end;
+                if $(let Some(value) = None::<f32>) { gap: value };
             }
         };
         assert_eq!(actual.calls, ["new", "label(outer)"]);
@@ -1779,13 +1781,13 @@ fn if_let_values_preserve_borrows_and_else_if_bindings() {
         let outer = String::from("outer");
         let text = &outer;
         let actual = ui! {
-            @if (let Some(ref text) = first)
+            if $(let Some(ref text) = first) ^(
                 text
-            @else if (let Some(ref text) = second)
+            ) else if $(let Some(ref text) = second) ^(
                 text
-            @else
+            ) else ^(
                 text
-            @end
+            )
         };
         assert_eq!(actual, expected);
         assert_eq!(first.as_ref().or(second.as_ref()).unwrap_or(text), actual);
@@ -1805,14 +1807,14 @@ fn if_let_chains_short_circuit_and_share_bindings() {
         let tick = || calls.set(calls.get() + 1);
         let source = source.map(|inner| inner.map(String::from));
         let actual = ui! {
-            @if ({ tick(); enabled }
+            if $({ tick(); enabled }
                 && let Some(inner) = { tick(); source }
                 && let Some(text) = { tick(); inner }
-                && { tick(); !text.is_empty() })
+            && { tick(); !text.is_empty() }) ^(
                 text
-            @else
+            ) else ^(
                 "fallback".String::from
-            @end
+            )
         };
         assert_eq!(actual, expected);
         assert_eq!(calls.get(), evaluations);
@@ -1827,13 +1829,13 @@ fn if_conditions_preserve_struct_literal_grouping() {
 
     for enabled in [true, false] {
         let actual = ui! {
-            @if (Flags { enabled }.enabled)
+            if $(Flags { enabled }.enabled) ^(
                 "enabled"
-            @else if (!Flags { enabled }.enabled)
+            ) else if $(!Flags { enabled }.enabled) ^(
                 "disabled"
-            @else
+            ) else ^(
                 "unreachable"
-            @end
+            )
         };
         assert_eq!(actual, if enabled { "enabled" } else { "disabled" });
     }
@@ -1843,20 +1845,22 @@ fn if_conditions_preserve_struct_literal_grouping() {
 fn nested_attribute_controls_work_inside_mappers_and_keep_bindings_hygienic() {
     let selected = Some(8.0);
     let actual = ui! {
-        .List::new {
+        .List::new.{
             map: {
-                @if (false)
+                if $(false) {
                     label: "wrong";
-                @else
+                } else {
                     flex;
-                    @match (&selected)
-                    @case (Some(__uim_value) if *__uim_value > 0.0)
-                        gap: $*__uim_value;
-                        when: true, { flex_col };
-                    @case (_)
-                    @end;
-                @end;
-                @if (false) gap: 99.0 @end;
+                    match $(&selected) ^(
+                        Some(__uim_value) if $(*__uim_value > 0.0) => {
+                            gap: $(*__uim_value);
+                            when: true, { flex_col };
+                        },
+                        _ => {
+                        },
+                    );
+                };
+                if $(false) { gap: 99.0 };
                 label: "after";
             };
         }
@@ -1873,21 +1877,27 @@ fn match_fragments_support_guards_spreads_and_different_child_types() {
     let calls = Cell::new(0);
     let result: Result<Vec<&str>, &str> = Ok(vec!["a", "b"]);
     let actual = ui! {
-        .List::new [
-            @match ({ calls.set(calls.get() + 1); &result })
-            @case (Ok(items) if items.is_empty())
-                .List::new ["empty"],
-            @case (Ok(items))
-                ..items { iter; map: (item) => $*item },
-                "ready",
-            @case (Err(error))
-                .List::new [format!("error: {error}")],
-            @end,
-            @match (3)
-            @case (0 | 1) "wrong"
-            @case (n @ 2..=4 if n == 3) "range"
-            @case (_) // Empty fallback adds nothing.
-            @end,
+        .List::new.[
+            match $({ calls.set(calls.get() + 1); &result }) ^(
+                Ok(items) if $(items.is_empty()) => [
+                    .List::new.["empty"],
+                ],
+                Ok(items) => [
+                    ..items.{ iter; map: (item) => $(*item) },
+                    "ready",
+                ],
+                Err(error) => [
+                    .List::new.[format!("error: {error}")],
+                ],
+            ),
+            match $(3) ^(
+                0 | 1 => [ "wrong"
+                ],
+                n @ 2..=4 if $(n == 3) => [ "range"
+                ],
+                _ => [ // Empty fallback adds nothing.
+                ],
+            ),
         ]
     };
     assert_eq!(calls.get(), 1);
@@ -1904,15 +1914,17 @@ fn value_controls_support_arguments_suffixes_and_closure_bodies() {
         node.label("finished")
     }
     let actual = ui! {
-        @if (false)
-            .List::new ["wrong"]
-        @else
-            .List::new ["selected"]
-        @end { flex } ["after"].finish {
-            gap: @match (Some(3.0))
-                 @case (Some(n)) n
-                 @case (None) 0.0
-                 @end;
+        if $(false) ^(
+            .List::new.["wrong"]
+        ) else ^(
+            .List::new.["selected"]
+        ).{ flex }.["after"].finish.{
+            gap: match $(Some(3.0)) ^(
+                Some(n) => ^(n
+                ),
+                None => ^(0.0
+                ),
+            );
         }
     };
     assert_eq!(actual.calls, ["new", "flex", "label(finished)", "gap(3)"]);
@@ -1922,12 +1934,13 @@ fn value_controls_support_arguments_suffixes_and_closure_bodies() {
     );
     assert_eq!(
         ui! {
-            (@if (true) 2 @else 9 @end, 3).(a, b) => $(a + b)
+            (if $(true) ^(2) else ^(9 ),
+            3).(a, b) => $(a + b)
         },
         5
     );
     let render = ui! {
-        (ready: bool) => @if (ready) .List::new ["yes"] @else .List::new ["no"] @end
+        (ready: bool) => if $(ready) ^(.List::new.["yes"]) else ^(.List::new.["no"] )
     };
     assert_eq!(render(false).children, [Child::Text("no".into())]);
 }
@@ -1937,10 +1950,12 @@ fn match_values_preserve_borrows_from_place_expressions() {
     let source = Some(String::from("borrowed"));
     let fallback = String::from("fallback");
     let borrowed = ui! {
-        @match (source)
-        @case (Some(ref text)) text
-        @case (None) $(&fallback)
-        @end
+        match $(source) ^(
+            Some(ref text) => ^(text
+            ),
+            None => ^($(&fallback)
+            ),
+        )
     };
     assert_eq!(borrowed, "borrowed");
     assert_eq!(source.as_ref().unwrap(), borrowed);
@@ -1963,13 +1978,270 @@ fn control_fragments_allow_type_changes_when_arms_agree() {
         }
     }
     let actual = ui! {
-        Initial {
-            @if (true) finish: "first" @else finish: "other" @end;
-            @match (false)
-            @case (true) label: "wrong"
-            @case (false) label: "last"
-            @end;
+        Initial.{
+            if $(true) { finish: "first" } else { finish: "other" };
+            match $(false) ^(
+                true => { label: "wrong"
+                },
+                false => { label: "last"
+                },
+            );
         }
     };
     assert_eq!(actual.tag, "last");
+}
+
+#[test]
+fn v2_groups_apply_to_the_same_builder_in_source_order() {
+    let actual = ui! {
+        .List::new.{
+            flex;
+            { gap: 1.0.px; { flex_col }; label: "group" };
+            gap: 2.0.px;
+        }.[
+            "first",
+            ["second", ["third"], ..$(["fourth", "fifth"])],
+            "last",
+        ]
+    };
+    assert_eq!(
+        actual.calls,
+        [
+            "new",
+            "flex",
+            "gap(1)",
+            "flex_col",
+            "label(group)",
+            "gap(2)"
+        ]
+    );
+    assert_eq!(
+        actual.children,
+        ["first", "second", "third", "fourth", "fifth", "last"].map(|s| Child::Text(s.into()))
+    );
+}
+
+#[test]
+fn v2_tuples_and_unary_operators_compose_with_calls() {
+    fn increment(n: i32) -> i32 {
+        n + 1
+    }
+    fn length(s: &str) -> usize {
+        s.len()
+    }
+    fn update(n: &mut i32) -> i32 {
+        *n += 1;
+        *n
+    }
+    let owned = String::from("owned");
+    let mut number = 2;
+    assert_eq!(ui! { -number.increment }, -1);
+    let empty = owned.is_empty();
+    assert!(ui! { !empty });
+    assert_eq!(ui! { &owned.length }, 5);
+    assert_eq!(ui! { &mut number.update }, 3);
+    assert_eq!(ui! { *&number.increment }, 4);
+    assert_eq!(ui! { @(~owned, number.increment) }, (owned.clone(), 4));
+    assert_eq!(ui! { @(number) }, (3,));
+    assert_eq!(ui! { @() }, ());
+    assert_eq!(ui! { ~owned }, owned);
+    let calls = Cell::new(0);
+    let next = || {
+        let n = calls.get();
+        calls.set(n + 1);
+        n
+    };
+    assert_eq!(ui! { @(.next, .next) }, (0, 1));
+    assert_eq!(calls.get(), 2);
+}
+
+#[test]
+fn v2_controls_use_uim_headers_and_explicit_value_boundaries() {
+    fn positive(n: i32) -> bool {
+        n > 0
+    }
+    fn decorate(n: i32) -> i32 {
+        n * 10
+    }
+    let source = Some(3);
+    assert_eq!(ui! { if 1.positive ^(2) else ^(4).decorate }, 20);
+    assert_eq!(ui! { if 1.positive ^(2) else ^(4.decorate) }, 2);
+    assert_eq!(ui! { if let Some(x) = source ^(x.decorate) else ^(0) }, 30);
+    assert_eq!(
+        ui! {
+                match source ^(
+                    Some(x) if x.positive => ^(match x ^(
+                            3 => ^(7),
+                            _ => ^(8),
+                    )),
+                    _ => ^(9),
+                ).decorate
+        },
+        70
+    );
+    let tree = ui! {
+        .List::new.{ if !false { flex }; if let Some(n) = source { set_pair: n, n } }.[
+            if source.is_some ^("yes") else ^("no"),
+        ]
+    };
+    assert_eq!(tree.calls, ["new", "flex", "set_pair(3, 3)"]);
+    assert_eq!(tree.children, [Child::Text("yes".into())]);
+    fn is_some(value: Option<i32>) -> bool {
+        value.is_some()
+    }
+}
+
+#[test]
+fn v2_mapping_values_defer_conditions_and_child_expressions() {
+    let calls = Cell::new(0);
+    let configure = ui! { (node: List) => node.if $(calls.replace(calls.get() + 1) == 0) { flex } else { flex_col } };
+    assert_eq!(calls.get(), 0);
+    assert_eq!(configure(List::new()).calls, ["new", "flex"]);
+    assert_eq!(configure(List::new()).calls, ["new", "flex_col"]);
+    let mapped = List::new().map(ui! { if true { gap: 3.0.px } else { gap: 9.0.px } });
+    assert_eq!(mapped.calls, ["new", "gap(3)"]);
+    let text = String::from("captured");
+    let mapped = List::new().map(ui! { move [text, ["nested"]] });
+    assert_eq!(
+        mapped.children,
+        [Child::Text("captured".into()), Child::Text("nested".into())]
+    );
+    let mapped = List::new().map(ui! { match true ^(true => { flex },
+    false => { flex_col }) });
+    assert_eq!(mapped.calls, ["new", "flex"]);
+}
+
+#[test]
+#[allow(unreachable_code)]
+fn v2_immediate_mapping_preserves_return_and_question_mark_scope() {
+    let actual = ui! {
+        .List::new.{
+            gap: $({ return List::new().flex(); 0.0 });
+        }.{ flex_col }
+    };
+    assert_eq!(actual.calls, ["new", "flex", "flex_col"]);
+    let result: Result<List, &str> = ui! {
+        .List::new.{
+            gap: $(Err::<f32, &str>("expected")?);
+            map: Ok;
+        }
+    };
+    assert_eq!(result.unwrap_err(), "expected");
+}
+
+#[test]
+fn v2_child_value_controls_accept_suffixes_and_empty_match_is_a_value() {
+    fn decorate(label: &str) -> String {
+        format!("{label}!")
+    }
+    let actual = ui! {
+        .List::new.[
+            if true ^("yes") else ^("no").decorate,
+            match false ^(true => ^("wrong"), false => ^("right")).decorate,
+        ]
+    };
+    assert_eq!(
+        actual.children,
+        [Child::Text("yes!".into()), Child::Text("right!".into())]
+    );
+    enum Never {}
+    fn absurd(value: Never) -> i32 {
+        ui! { match value ^() }
+    }
+    let _: fn(Never) -> i32 = absurd;
+}
+
+#[test]
+#[allow(unreachable_code, clippy::diverging_sub_expression)]
+fn v2_mapping_macro_returns_stay_inside_the_mapping() {
+    macro_rules! finish {
+        () => {
+            return List::new().flex()
+        };
+    }
+    let actual = ui! { .List::new.{ gap: finish!() }.{ flex_col } };
+    assert_eq!(actual.calls, ["new", "flex", "flex_col"]);
+}
+
+#[test]
+fn arrow_fields_work_in_conditions_and_preserve_field_borrows_and_moves() {
+    struct Task {
+        priority: bool,
+        title: String,
+        count: i32,
+        choice: Option<String>,
+        r#type: u8,
+    }
+    struct Holder {
+        task: Task,
+    }
+    let mut holder = Holder {
+        task: Task {
+            priority: true,
+            title: String::from("important"),
+            count: 3,
+            choice: Some(String::from("selected")),
+            r#type: 7,
+        },
+    };
+    // Neither struct implements Clone: only the selected field is cloned.
+    assert_eq!(ui! { ~holder->task->title }, "important");
+    assert_eq!(ui! { &holder->task->title }, &holder.task.title);
+    assert!(!ui! { !holder->task->priority });
+    assert_eq!(ui! { -holder->task->count }, -3);
+    fn bump(value: &mut i32) -> i32 {
+        *value += 1;
+        *value
+    }
+    assert_eq!(ui! { &mut holder->task->count.bump }, 4);
+    assert_eq!(holder.task.count, 4);
+    assert_eq!(ui! { holder->task->r#type }, 7);
+    assert_eq!(ui! { @(holder->task->count, 9)->0 }, 4);
+    let borrowed = ui! {
+        match holder->task->choice ^(
+            Some(ref text) if holder->task->priority => ^(text),
+            _ => ^(&holder->task->title),
+        )
+    };
+    assert_eq!(borrowed, "selected");
+    assert_eq!(holder.task.choice.as_ref().unwrap(), borrowed);
+    let actual = ui! {
+        .List::new.{
+            if holder->task->priority { flex };
+            label: &holder->task->title;
+        }.[
+            if holder->task->priority ^(~holder->task->title) else ^("other".String::from),
+        ]
+    };
+    assert_eq!(actual.calls, ["new", "flex", "label(important)"]);
+    assert_eq!(actual.children, [Child::Text("important".into())]);
+    let moved = ui! { holder->task->title };
+    assert_eq!(moved, "important");
+    assert!(holder.task.priority);
+}
+
+#[test]
+fn arrow_fields_project_call_results_once_and_continue_the_pipeline() {
+    struct Record {
+        label: String,
+    }
+    let calls = Cell::new(0);
+    let make = || {
+        calls.set(calls.get() + 1);
+        Record {
+            label: String::from("created"),
+        }
+    };
+    fn length(label: String) -> usize {
+        label.len()
+    }
+    fn wrap(label: String) -> Record {
+        Record { label }
+    }
+    assert_eq!(ui! { .make->label.length }, 7);
+    assert_eq!(calls.get(), 1);
+    assert_eq!(ui! { "input".String::from.wrap->label.length }, 5);
+    assert_eq!(ui! { ("tuple".String::from).wrap->label }, "tuple");
+    assert_eq!(ui! { if true ^(.make) else ^(.make)->label.length }, 7);
+    assert_eq!(calls.get(), 2);
 }

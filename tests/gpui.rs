@@ -55,7 +55,7 @@ mod element_attributes {
     fn converts_element_slots_and_forwards_or_clears_optional_elements() {
         let text = String::from("collapsed content");
         let mut panel = el! {
-            .Panel::new {
+            .Panel::new.{
                 expanded: .div;
                 collapsed: text;
             }
@@ -111,21 +111,21 @@ fn map_closures_infer_real_gpui_style_and_element_types() {
     }
 
     let refinement = refine(m! {
-        bg: 0x818cf8.gpui::rgb;
-        p: 8.0.px;
-        border_1;
+            bg: 0x818cf8.gpui::rgb;
+            p: 8.0.px;
+            border_1;
     });
     assert_eq!(refinement.background, Some(gpui::rgb(0x818cf8).into()));
     assert_eq!(refinement.padding.top, Some(px(8.0).into()));
     assert_eq!(refinement.border_widths.top, Some(px(1.0).into()));
 
     let mut element: Stateful<Div> = div().map(m! {
-        # "styled";
-        when: true, $m! { gap: 4.0.px };
-        hover: { bg: 0x818cf8.gpui::rgb };
-        active: { bg: 0x6366f1.gpui::rgb };
-        focus: { border_2; border_color: 0xffffff.gpui::rgb };
-        group_hover: "group", $m! { text_color: 0xffffff.gpui::rgb };
+            # "styled";
+            when: true, $(m! { gap: 4.0.px });
+            hover: { bg: 0x818cf8.gpui::rgb };
+            active: { bg: 0x6366f1.gpui::rgb };
+            focus: { border_2; border_color: 0xffffff.gpui::rgb };
+            group_hover: "group", $(m! { text_color: 0xffffff.gpui::rgb });
     });
     assert_eq!(element.style().gap.height, Some(px(4.0).into()));
 
@@ -136,7 +136,7 @@ fn map_closures_infer_real_gpui_style_and_element_types() {
     assert_eq!(custom.style().gap.height, Some(px(6.0).into()));
 
     let mut mapped: Stateful<Div> = el! {
-        .div {
+        .div.{
             map: {
                 # "mapped-element";
                 hover: { bg: 0x818cf8.gpui::rgb };
@@ -147,9 +147,9 @@ fn map_closures_infer_real_gpui_style_and_element_types() {
     assert_eq!(mapped.style().padding.top, Some(px(8.0).into()));
 
     let mut suffixed: Stateful<Div> = el! {
-        .div { flex; }
+        .div.{ flex; }
         .gds_uim::m! { # "suffixed-element"; hover: { bg: 0x475569.gpui::rgb } }
-        { gap: 6.0.px }
+        .{ gap: 6.0.px }
     };
     assert_eq!(suffixed.style().display, Some(Display::Flex));
     assert_eq!(suffixed.style().gap.height, Some(px(6.0).into()));
@@ -231,12 +231,12 @@ fn accepts_optional_sections_with_real_gpui_components() {
     let elements = [
         el! { .List::new },
         el! { ().List::new },
-        el! { .List::new {} },
-        el! { .List::new [] },
-        el! { .List::new {} [] },
-        el! { ().List::new {} },
-        el! { ().List::new [] },
-        el! { ().List::new {} [] },
+        el! { .List::new.{} },
+        el! { .List::new.[] },
+        el! { .List::new.{}.[] },
+        el! { ().List::new.{} },
+        el! { ().List::new.[] },
+        el! { ().List::new.{}.[] },
     ];
 
     for mut element in elements {
@@ -244,17 +244,17 @@ fn accepts_optional_sections_with_real_gpui_components() {
         let _: AnyElement = element.into_any_element();
     }
 
-    let mut element = el! { .List::new { flex; flex_col; gap: 8.0.px } };
+    let mut element = el! { .List::new.{ flex; flex_col; gap: 8.0.px } };
     let style = element.style();
     assert_eq!(style.display, Some(Display::Flex));
     assert_eq!(style.flex_direction, Some(FlexDirection::Column));
     assert_eq!(style.gap.height, Some(px(8.0).into()));
 
-    let _: Div = el! { $(div()) {} [] };
-    let _: Div = el! { $div() {} [] };
+    let _: Div = el! { $(div()).{}.[] };
+    let _: Div = el! { $(div()).{}.[] };
     let _: Div = el! { .div };
     let _: Div = el! { ().div };
-    let _: Div = el! { .gpui::div {} [] };
+    let _: Div = el! { .gpui::div.{}.[] };
     let _: gpui::Deferred = el! { .div.deferred };
 }
 
@@ -275,33 +275,33 @@ fn lays_out_the_documented_tree_with_real_gpui(cx: &mut TestAppContext) {
             let existing = div().size(px(16.0));
 
             el! {
-                .List::new {
+                .List::new.{
                     flex;
                     flex_col;
                     w: 200.0.px;
                     gap: 8.0.px;
-                    on_children_prepainted: move (bounds, _window, _cx) => ${
-                        *record_root.borrow_mut() = bounds;
-                    };
-                } [
-                    @if (show_dynamic.get())
-                        .div { w: 20.0.px; h: 10.0.px },
-                    @end,
-                    .div {
+                    on_children_prepainted: move (bounds, _window, _cx) => $({
+                            *record_root.borrow_mut() = bounds;
+                    });
+                }.[
+                    if $(show_dynamic.get()) [
+                        .div.{ w: 20.0.px; h: 10.0.px },
+                    ],
+                    .div.{
                         flex;
                         flex_col;
                         w: 40.0.px;
                         gap: 3.0.px;
-                        on_children_prepainted: move (bounds, _window, _cx) => ${
-                            *record_nested.borrow_mut() = bounds;
-                        };
-                    } [
-                        .div { w: 30.0.px; h: 5.0.px },
-                        ().div { w: 30.0.px; h: 7.0.px },
+                        on_children_prepainted: move (bounds, _window, _cx) => $({
+                                *record_nested.borrow_mut() = bounds;
+                        });
+                    }.[
+                        .div.{ w: 30.0.px; h: 5.0.px },
+                        ().div.{ w: 30.0.px; h: 7.0.px },
                     ],
-                    "confirm".Button::with_label { label: "确定"; w: 50.0.px; h: 24.0.px },
+                    "confirm".Button::with_label.{ label: "确定"; w: 50.0.px; h: 24.0.px },
                     ..rest,
-                    $existing,
+                    $(existing),
                 ]
             }
             .into_any_element()
@@ -354,13 +354,13 @@ fn constructs_and_paints_gpui_text_with_constructor_arguments(cx: &mut TestAppCo
             let interactive: InteractiveText = el! { ("text-id", text).gpui::InteractiveText::new };
 
             el! {
-                .div {
+                .div.{
                     flex;
                     flex_col;
                     w: 200.0.px;
-                } [
+                }.[
                     ..texts,
-                    $interactive,
+                    $(interactive),
                 ]
             }
             .into_any_element()
@@ -388,18 +388,18 @@ fn uses_gpui_conditions_and_evaluates_expressions_once() {
     };
 
     let mut element: Stateful<Div> = el! {
-        $({ calls.set(calls.get() + 1); div() }) {
+        $({ calls.set(calls.get() + 1); div() }).{
             # "condition-test";
             flex;
-            when: disabled, $|element| {
-                skipped.set(skipped.get() + 1);
-                element.gap(px(100.0))
-            };
-            when: $enabled && !disabled, $|element| element.gap(evaluate());
-        } [
+            when: disabled, $(|element| {
+                    skipped.set(skipped.get() + 1);
+                    element.gap(px(100.0))
+            });
+            when: $(enabled && !disabled), $(|element| element.gap(evaluate()));
+        }.[
             "标题",
-            ..$std::iter::once({ calls.set(calls.get() + 1); div() }),
-            .div { flex } ["内容"],
+            ..$(std::iter::once({ calls.set(calls.get() + 1); div() })),
+            .div.{ flex }.["内容"],
         ]
     };
 
@@ -413,7 +413,7 @@ fn when_mapper_changes_the_border_only_when_selected() {
     const ACCENT: u32 = 0x818cf8;
     for selected in [false, true] {
         let mut row: Stateful<Div> = el! {
-            .div {
+            .div.{
                 # "row";
                 border_1;
                 border_color: 0x30384b.gpui::rgb;
@@ -437,15 +437,15 @@ fn dispatches_gpui_events_after_a_type_changing_id_method(cx: &mut TestAppContex
             let record_click = record_click.clone();
             let record_mouse_down = record_mouse_down.clone();
             let element: Stateful<Div> = el! {
-                .div {
+                .div.{
                     # "button";
                     size: 40.0.px;
-                    on_mouse_down: MouseButton::Left, $move |_event, _window, _cx| {
-                        record_mouse_down.set(record_mouse_down.get() + 1);
-                    };
-                    on_click: move (_event, _window, _cx) => ${
-                        record_click.set(record_click.get() + 1);
-                    };
+                    on_mouse_down: MouseButton::Left, $(move |_event, _window, _cx| {
+                            record_mouse_down.set(record_mouse_down.get() + 1);
+                    });
+                    on_click: move (_event, _window, _cx) => $({
+                            record_click.set(record_click.get() + 1);
+                    });
                 }
             };
             element.into_any_element()
@@ -460,10 +460,10 @@ fn dispatches_gpui_events_after_a_type_changing_id_method(cx: &mut TestAppContex
 #[test]
 fn accepts_postfix_calls_for_svg_and_image_elements() {
     let mut vector: gpui::Svg = el! {
-        .gpui::svg { path: "icons/confirm.svg"; size: 16.0.px }
+        .gpui::svg.{ path: "icons/confirm.svg"; size: 16.0.px }
     };
     let mut image: gpui::Img = el! {
-        "images/avatar.png".gpui::img { size: 32.0.px }
+        "images/avatar.png".gpui::img.{ size: 32.0.px }
     };
 
     assert_eq!(vector.style().size.width, Some(px(16.0).into()));
@@ -480,13 +480,13 @@ fn paints_a_canvas_from_a_generic_postfix_call(cx: &mut TestAppContext) {
         TestView(Box::new(move || {
             let record_paint = record_paint.clone();
             el! {
-                .div { flex } [
+                .div.{ flex }.[
                     (
-                        $|bounds, _window, _cx| bounds.size.width,
-                        $move |bounds, prepaint_width, _window, _cx| {
-                            *record_paint.borrow_mut() = Some((bounds, prepaint_width));
-                        },
-                    ).gpui::canvas::<Pixels> { size: 24.0.px },
+                        $(|bounds, _window, _cx| bounds.size.width),
+                        $(move |bounds, prepaint_width, _window, _cx| {
+                                *record_paint.borrow_mut() = Some((bounds, prepaint_width));
+                        }),
+                    ).gpui::canvas::<Pixels>.{ size: 24.0.px },
                 ]
             }
             .into_any_element()
@@ -508,9 +508,9 @@ fn suffix_deferred_preserves_layout_and_orders_paint_by_priority(cx: &mut TestAp
     ) -> impl IntoElement {
         el! {
             (
-                $|_, _, _| (),
-                $move |_, _, _, _| paints.borrow_mut().push(label),
-            ).gpui::canvas::<()> { size: extent.px; }
+                $(|_, _, _| ()),
+                $(move |_, _, _, _| paints.borrow_mut().push(label)),
+            ).gpui::canvas::<()>.{ size: extent.px; }
         }
     }
 
@@ -522,23 +522,23 @@ fn suffix_deferred_preserves_layout_and_orders_paint_by_priority(cx: &mut TestAp
         TestView(Box::new(move || {
             let record_bounds = record_bounds.clone();
             el! {
-                .div {
+                .div.{
                     flex;
                     flex_col;
                     w: 100.0.px;
                     gap: 4.0.px;
-                    on_children_prepainted: $move |children, _, _| {
-                        *record_bounds.borrow_mut() = children;
-                    };
-                } [
-                    ("normal-first", 8.0, $record_paints.clone()).recorded_canvas,
-                    .div [
-                        ("deferred-high", 16.0, $record_paints.clone()).recorded_canvas,
+                    on_children_prepainted: $(move |children, _, _| {
+                            *record_bounds.borrow_mut() = children;
+                    });
+                }.[
+                    ("normal-first", 8.0, $(record_paints.clone())).recorded_canvas,
+                    .div.[
+                        ("deferred-high", 16.0, $(record_paints.clone())).recorded_canvas,
                     ].m! { size: 16.0.px }.deferred.m! { priority: 10; },
-                    ("normal-second", 8.0, $record_paints.clone()).recorded_canvas,
-                    .div { size: 12.0.px; } [
-                        ("deferred-low", 12.0, $record_paints.clone()).recorded_canvas,
-                    ].gpui::deferred { priority: 1; },
+                    ("normal-second", 8.0, $(record_paints.clone())).recorded_canvas,
+                    .div.{ size: 12.0.px; }.[
+                        ("deferred-low", 12.0, $(record_paints.clone())).recorded_canvas,
+                    ].gpui::deferred.{ priority: 1; },
                 ]
             }
             .into_any_element()
@@ -568,36 +568,36 @@ fn suffix_deferred_preserves_layout_and_orders_paint_by_priority(cx: &mut TestAp
 #[test]
 fn postfix_calls_cover_wrappers_caches_and_virtual_lists() {
     let _: gpui::Anchored = el! {
-        .gpui::anchored { anchor: gpui::Corner::TopLeft; } [.gpui::div]
+        .gpui::anchored.{ anchor: gpui::Corner::TopLeft; }.[.gpui::div]
     };
-    let _: gpui::Deferred = el! { .gpui::div ["Content"].gpui::deferred };
+    let _: gpui::Deferred = el! { .gpui::div.["Content"].gpui::deferred };
     let _: gpui::Deferred = el! {
-        .gpui::div ["Content"].gpui::deferred { priority: 2; }
+        .gpui::div.["Content"].gpui::deferred.{ priority: 2; }
     };
 
     let provider = gpui::retain_all("image-cache");
     let mut cache: gpui::ImageCacheElement = el! {
-        provider.gpui::image_cache { size: 32.0.px; } [.gpui::div]
+        provider.gpui::image_cache.{ size: 32.0.px; }.[.gpui::div]
     };
     assert_eq!(cache.style().size.width, Some(px(32.0).into()));
 
     let state = gpui::ListState::new(0, gpui::ListAlignment::Top, px(20.0));
     let mut list: gpui::List = el! {
-        (state, $|_, _, _| el! { .div }.into_any_element()).gpui::list { size: 20.0.px; }
+        (state, $(|_, _, _| el! { .div }.into_any_element())).gpui::list.{ size: 20.0.px; }
     };
     assert_eq!(list.style().size.height, Some(px(20.0).into()));
 
     let mut uniform: gpui::UniformList = el! {
-        ("uniform-list", 0, $|range, _, _| {
-            range.map(|_| el! { .div { size: 24.0.px; } }).collect::<Vec<_>>()
-        }).gpui::uniform_list { size: 24.0.px; }
+        ("uniform-list", 0, $(|range, _, _| {
+                    range.map(|_| el! { .div.{ size: 24.0.px; } }).collect::<Vec<_>>()
+        })).gpui::uniform_list.{ size: 24.0.px; }
     };
     assert_eq!(uniform.style().size.height, Some(px(24.0).into()));
 
     // SurfaceSource is platform-specific and uninhabited on Linux. Check the
     // factory's signature without requiring a macOS video buffer.
     fn make_surface(source: gpui::SurfaceSource) -> gpui::Surface {
-        el! { source.gpui::surface { size: 16.0.px; } }
+        el! { source.gpui::surface.{ size: 16.0.px; } }
     }
     let _make_surface: fn(gpui::SurfaceSource) -> gpui::Surface = make_surface;
 }

@@ -39,7 +39,7 @@ impl MyButton {
 }
 
 let button = el! {
-    "confirm".MyButton::new {
+    "confirm".MyButton::new.{
         icon: Icon::Check;
         text: "确定";
         width: 120.0;
@@ -113,7 +113,7 @@ impl Panel {
 }
 
 let panel = el! {
-    .Panel::new {
+    .Panel::new.{
         expanded: .div;
         collapsed: "收起时的内容";
     }

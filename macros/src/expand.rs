@@ -5,8 +5,8 @@ use quote::{format_ident, quote, quote_spanned};
 use syn::Ident;
 
 use crate::parse::{
-    Attribute, Attributes, Body, Child, Children, Control, ControlKind, Expression, Head, Mapper,
-    Section, Value,
+    Attribute, Attributes, Branch, Child, Children, Control, ControlKind, Expression, Head, Mapper,
+    Section, Suffix, Value,
 };
 
 pub fn expression(expr: &Expression) -> TokenStream {
@@ -14,9 +14,12 @@ pub fn expression(expr: &Expression) -> TokenStream {
         Head::Value(val) => value(val),
         Head::Call(args, callable) => apply(args.iter().map(expression).collect(), callable),
     };
-    let mut result = body(head, &expr.body);
-    for (callable, next_body) in &expr.suffixes {
-        result = body(apply(vec![result], callable), next_body);
+    let mut result = head;
+    for suffix in &expr.suffixes {
+        result = match suffix {
+            Suffix::Call(callable) => apply(vec![result], callable),
+            Suffix::Field(member) => quote! { (#result).#member },
+        };
     }
     result
 }
@@ -24,6 +27,18 @@ pub fn expression(expr: &Expression) -> TokenStream {
 fn value(val: &Value) -> TokenStream {
     match val {
         Value::Rust(expr) => quote! { #expr },
+        Value::Field(base, member) => {
+            let base = value(base);
+            quote! { (#base).#member }
+        }
+        Value::Unary(op, inner) => {
+            let inner = value(inner);
+            quote! { #op (#inner) }
+        }
+        Value::Tuple(_, items) => {
+            let items = items.iter().map(expression);
+            quote! { (#(#items,)*) }
+        }
         Value::Clone(tilde, inner) => {
             let inner = value(inner);
             quote_spanned! { tilde.span => (#inner).clone() }
@@ -35,12 +50,49 @@ fn value(val: &Value) -> TokenStream {
             let body = expression(&closure.body);
             quote! { #capture |#inputs| { #body } }
         }
-        Value::Control(branches) => control(branches, expression, TokenStream::new()),
+        Value::Control(branches) => {
+            if branches.is_mapping() {
+                let receiver = binding();
+                let result = mapping_control(branches, quote! { #receiver });
+                quote! { |#receiver| #result }
+            } else {
+                control(
+                    branches,
+                    |branch| match branch {
+                        Branch::Value(expr) => expression(expr),
+                        Branch::Mapping(_) => unreachable!("validated by parser"),
+                    },
+                    TokenStream::new(),
+                )
+            }
+        }
     }
 }
 
 fn apply(args: Vec<TokenStream>, callable: &Value) -> TokenStream {
     let span = callable.span();
+    // Immediate mapping application can be emitted as a builder chain. This
+    // retains contextual typing, temporary lifetimes and shallow expansions.
+    if args.len() == 1 {
+        if let Value::Mapper(mapping) = callable
+            && mapping.capture.is_none()
+        {
+            let mapped = section(args[0].clone(), &mapping.section);
+            if !needs_closure_scope(mapped.clone()) {
+                return mapped;
+            }
+        }
+        if let Value::Control(branches) = callable
+            && branches.is_mapping()
+        {
+            let receiver = binding();
+            let input = &args[0];
+            let selected = mapping_control(branches, quote! { #receiver });
+            if !needs_closure_scope(selected.clone()) {
+                return quote! {{ let #receiver = #input; #selected }};
+            }
+        }
+    }
     // Preserve Rust's contextual typing for generic factories taking callbacks
     // (including higher-ranked lifetimes), and its borrowing of Fn/FnMut paths.
     if let Value::Rust(expr) = callable
@@ -72,6 +124,20 @@ fn apply(args: Vec<TokenStream>, callable: &Value) -> TokenStream {
     }
 }
 
+// An immediate application may omit its closure only if Rust control transfers
+// cannot observe that omission. Macro bodies are conservatively scanned too.
+fn needs_closure_scope(tokens: TokenStream) -> bool {
+    tokens.into_iter().any(|token| match token {
+        TokenTree::Ident(ident) => {
+            matches!(ident.to_string().as_str(), "return" | "break" | "continue")
+        }
+        // A macro can expand to a return/try that is invisible at this stage.
+        TokenTree::Punct(punct) => matches!(punct.as_char(), '?' | '!'),
+        TokenTree::Group(group) => needs_closure_scope(group.stream()),
+        _ => false,
+    })
+}
+
 // Mixed-site spans protect local bindings, but not item names. Avoid capturing
 // a caller's function or variable when introducing the local helper function.
 fn helper_name(args: &[TokenStream], callable: &TokenStream) -> Ident {
@@ -101,14 +167,25 @@ fn binding() -> Ident {
     Ident::new("__uim_value", Span::mixed_site())
 }
 
-fn body(mut result: TokenStream, body: &Body) -> TokenStream {
-    for section in &body.0 {
-        result = match section {
-            Section::Attributes(attrs) => attributes(result, attrs),
-            Section::Children(items) => children(result, items),
-        };
+fn section(result: TokenStream, section: &Section) -> TokenStream {
+    match section {
+        Section::Attributes(attrs) => attributes(result, attrs),
+        Section::Children(items) => children(result, items),
     }
-    result
+}
+
+fn mapping_control(branches: &Control, receiver: TokenStream) -> TokenStream {
+    control(
+        branches,
+        |branch| match branch {
+            Branch::Mapping(mapping) => section(receiver.clone(), mapping),
+            Branch::Value(expr) => {
+                let result = expression(expr);
+                quote! { (#result)(#receiver) }
+            }
+        },
+        receiver.clone(),
+    )
 }
 
 // Keep ordinary child calls in one expression so temporary inputs live through
@@ -127,13 +204,10 @@ fn children(mut result: TokenStream, items: &Children) -> TokenStream {
                     quote! { (#result).child(#expr) }
                 }
             }
+            Child::Group(group) => section(result, group),
             Child::Control(branches) => {
                 let receiver = binding();
-                let selected = control(
-                    branches,
-                    |items| children(quote! { #receiver }, items),
-                    quote! { #receiver },
-                );
+                let selected = mapping_control(branches, quote! { #receiver });
                 quote! {{
                     let #receiver = #result;
                     #selected
@@ -155,11 +229,8 @@ fn attributes(initial: TokenStream, attrs: &Attributes) -> TokenStream {
                 let args = args.iter().map(expression);
                 quote! { #receiver.#method(#(#args),*) }
             }
-            Attribute::Control(branches) => control(
-                branches,
-                |attrs| attributes(quote! { #receiver }, attrs),
-                quote! { #receiver },
-            ),
+            Attribute::Group(group) => section(quote! { #receiver }, group),
+            Attribute::Control(branches) => mapping_control(branches, quote! { #receiver }),
             Attribute::Id(hash, expr) => {
                 let expr = expression(expr);
                 quote_spanned! { hash.span => #receiver.id(#expr) }
@@ -181,9 +252,9 @@ fn attributes(initial: TokenStream, attrs: &Attributes) -> TokenStream {
 // Fragment controls update the existing builder in the selected arm. Keeping
 // the match subject intact preserves Rust's borrowing and place-expression
 // semantics, and allows different child types without erasing them ourselves.
-fn control<T>(
-    branches: &Control<T>,
-    mut expand: impl FnMut(&T) -> TokenStream,
+fn control(
+    branches: &Control,
+    mut expand: impl FnMut(&Branch) -> TokenStream,
     fallback: TokenStream,
 ) -> TokenStream {
     match &branches.kind {
@@ -225,6 +296,6 @@ fn control<T>(
 pub fn mapper(mapping: &Mapper) -> TokenStream {
     let capture = &mapping.capture;
     let receiver = binding();
-    let result = attributes(quote! { #receiver }, &mapping.attributes);
+    let result = section(quote! { #receiver }, &mapping.section);
     quote! { #capture |#receiver| #result }
 }

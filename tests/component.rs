@@ -61,16 +61,16 @@ fn uses_generated_setters_in_el_with_a_manual_constructor_and_callback() {
     let raw = MoveOnly("raw".to_owned());
     let captured = String::from("abc");
     let button = el! {
-        id.Button::new {
+        id.Button::new.{
             width: 120.0;
             height: 32_u16;
             text: "Confirm";
             badge: badge;
             icon: "check";
-            raw: $Some(raw);
-            raw_into: $String::from("optional");
+            raw: raw.Some;
+            raw_into: "optional".String::from;
             disabled: true;
-            on_click: $move || captured.len();
+            on_click: $(move || captured.len());
         }
     };
 
@@ -244,7 +244,7 @@ mod custom_gpui_path {
             expanded: facade::AnyElement(String::new()),
             collapsed: None,
         };
-        let panel = el! { panel { expanded: "expanded"; collapsed: "collapsed" } };
+        let panel = el! { panel.{ expanded: "expanded"; collapsed: "collapsed" } };
         assert_eq!(panel.expanded.0, "expanded");
         assert_eq!(panel.collapsed.as_ref().unwrap().0, "collapsed");
         assert!(panel.collapsed_opt(None).collapsed.is_none());

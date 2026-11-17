@@ -132,7 +132,7 @@ struct Button {
 impl Button {
     fn new(id: &'static str) -> Self {
         Self {
-            element: el! { .div { # id; #? move id { into } } },
+            element: el! { .div.{ # id; #? move id.{ into } } },
             label: "".into(),
             highlighted: false,
         }
@@ -152,17 +152,17 @@ impl RenderOnce for Button {
             highlighted,
         } = self;
         el! {
-            element {
+            element.{
                 flex; flex_shrink_0; items_center; justify_center; h: 36.0.px; px: 14.0.px;
                 rounded_lg; text_size: 13.0.px; font_weight: FontWeight::MEDIUM; cursor_pointer;
-                @if (highlighted)
+                if highlighted {
                     bg: 0x424c99.rgb;
                     hover: { bg: 0x525fb5.rgb };
-                @else
+                } else {
                     bg: 0x242c3e.rgb;
                     hover: { bg: 0x343e54.rgb };
-                @end;
-            } [label]
+                };
+            }.[label]
         }
     }
 }
@@ -188,10 +188,10 @@ impl RenderOnce for Badge {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let Self { label, color } = self;
         el! {
-            .div {
+            .div.{
                 flex_shrink_0; px: 8.0.px; py: 4.0.px; rounded_md;
                 text_size: 11.0.px; text_color: color.rgb; bg: BACKGROUND.rgb;
-            } [label]
+            }.[label]
         }
     }
 }
@@ -224,12 +224,12 @@ impl RenderOnce for StatCard {
             color,
         } = self;
         el! {
-            .div {
+            .div.{
                 flex; flex_col; flex_1; gap: 6.0.px; p: 18.0.px;
-            } [
-                .div { text_size: 12.0.px; text_color: MUTED.rgb } [label],
-                .div { text_size: 28.0.px; font_weight: FontWeight::BOLD; text_color: color.rgb } [
-                    value { to_string },
+            }.[
+                .div.{ text_size: 12.0.px; text_color: MUTED.rgb }.[label],
+                .div.{ text_size: 28.0.px; font_weight: FontWeight::BOLD; text_color: color.rgb }.[
+                    value.{ to_string },
                 ],
             ].panel
         }
@@ -320,9 +320,9 @@ impl TaskBoard {
 
     fn filter_button(&self, filter: Filter, cx: &mut Context<Self>) -> Button {
         el! {
-            $(filter.id()).Button::new {
-                label: $filter.label();
-                highlighted: $self.filter == filter;
+            filter.{ id }.Button::new.{
+                label: filter.{ label };
+                highlighted: $(self.filter == filter);
                 on_click: (cx, filter.Self::on_filter).Context::listener;
             }
         }
@@ -335,28 +335,28 @@ impl TaskBoard {
         let hover = if selected { 0x2e3858 } else { 0x222a3c };
         let text = if task.done { MUTED } else { 0xe8edf7 };
         el! {
-            .div {
-                # $("task", id); #? move format!("task-{id}");
+            .div.{
+                # @("task", id); #? move format!("task-{id}");
                 flex; flex_shrink_0; items_center; gap: 12.0.px; p: 16.0.px; rounded_lg;
                 border_1; border_color: BORDER.rgb; bg: background.rgb;
                 cursor_pointer; hover: move { bg: hover.rgb };
                 when: selected, { border_color: ACCENT.rgb };
                 on_click: (cx, id.Self::on_select_task).Context::listener;
-            } [
-                .div { flex; flex_col; flex_1; min_w_0; gap: 6.0.px } [
-                    .div { text_size: 14.0.px; text_color: text.rgb; truncate } [$task.title],
-                    .div { text_size: 11.0.px; text_color: MUTED.rgb } [
+            }.[
+                .div.{ flex; flex_col; flex_1; min_w_0; gap: 6.0.px }.[
+                    .div.{ text_size: 14.0.px; text_color: text.rgb; truncate }.[task->title],
+                    .div.{ text_size: 11.0.px; text_color: MUTED.rgb }.[
                         format!("{}  /  {}", task.category, task.due),
                     ],
                 ],
-                @if (task.priority)
-                    "Priority".Badge::with_label { color: AMBER },
-                @end,
-                @if (task.done)
-                    "Done".Badge::with_label { color: GREEN },
-                @else
+                if task->priority [
+                    "Priority".Badge::with_label.{ color: AMBER },
+                ],
+                if task->done [
+                    "Done".Badge::with_label.{ color: GREEN },
+                ] else [
                     "Open".Badge::with_label,
-                @end,
+                ],
             ]
         }
     }
@@ -364,45 +364,47 @@ impl TaskBoard {
     fn details(&self, cx: &mut Context<Self>) -> Div {
         // A value match binds the selected task and returns a Div from either arm.
         el! {
-            @match (self.tasks.iter().find(|task| Some(task.id) == self.selected))
-            @case (Some(task))
-                .div { flex; flex_col; h_full; gap: 16.0.px } [
-                    .div { # "detail-content"; flex_1; min_h_0; overflow_y_scroll } [
-                        .div { flex; flex_col; gap: 16.0.px } [
-                            .div { text_size: 11.0.px; text_color: MUTED.rgb } ["TASK DETAILS"],
-                            .div { text_size: 21.0.px; font_weight: FontWeight::BOLD } [$task.title],
-                            .div { flex; gap: 8.0.px } [
-                                $(task.category).Badge::with_label { color: ACCENT },
-                                @if (task.done)
-                                    "Completed".Badge::with_label { color: GREEN },
-                                @else
-                                    "In progress".Badge::with_label { color: AMBER },
-                                @end,
+            match $(self.tasks.iter().find(|task| Some(task.id) == self.selected)) ^(
+                Some(task) => ^(
+                    .div.{ flex; flex_col; h_full; gap: 16.0.px }.[
+                        .div.{ # "detail-content"; flex_1; min_h_0; overflow_y_scroll }.[
+                            .div.{ flex; flex_col; gap: 16.0.px }.[
+                                .div.{ text_size: 11.0.px; text_color: MUTED.rgb }.["TASK DETAILS"],
+                                .div.{ text_size: 21.0.px; font_weight: FontWeight::BOLD }.[task->title],
+                                .div.{ flex; gap: 8.0.px }.[
+                                    task->category.Badge::with_label.{ color: ACCENT },
+                                    if task->done [
+                                        "Completed".Badge::with_label.{ color: GREEN },
+                                    ] else [
+                                        "In progress".Badge::with_label.{ color: AMBER },
+                                    ],
+                                ],
+                                .div.{ text_size: 14.0.px; text_color: MUTED.rgb; line_height: 22.0.px }.[task->description],
+                                .div.{ text_size: 12.0.px; text_color: MUTED.rgb }.[format!("Planned for {}", task.due.to_lowercase())],
                             ],
-                            .div { text_size: 14.0.px; text_color: MUTED.rgb; line_height: 22.0.px } [$task.description],
-                            .div { text_size: 12.0.px; text_color: MUTED.rgb } [format!("Planned for {}", task.due.to_lowercase())],
                         ],
-                    ],
-                    .div { flex; flex_col; flex_shrink_0; gap: 8.0.px } [
-                        "toggle-done".Button::new {
-                            label: @if (task.done) "Reopen task" @else "Mark complete" @end;
-                            highlighted: true;
-                            on_click: (cx, Self::on_toggle_done).Context::listener;
-                        },
-                        "toggle-priority".Button::new {
-                            label: @if (task.priority) "Remove priority" @else "Make priority" @end;
-                            on_click: (cx, Self::on_toggle_priority).Context::listener;
-                        },
-                    ],
-                ]
-            @case (None)
-                .div { flex; flex_col; gap: 12.0.px } [
-                    .div { text_size: 18.0.px; font_weight: FontWeight::BOLD } ["Nothing selected"],
-                    .div { text_size: 13.0.px; text_color: MUTED.rgb } [
-                        "Choose a task from the list to see its details.",
-                    ],
-                ]
-            @end
+                        .div.{ flex; flex_col; flex_shrink_0; gap: 8.0.px }.[
+                            "toggle-done".Button::new.{
+                                label: if task->done ^("Reopen task") else ^("Mark complete");
+                                highlighted: true;
+                                on_click: (cx, Self::on_toggle_done).Context::listener;
+                            },
+                            "toggle-priority".Button::new.{
+                                label: if task->priority ^("Remove priority") else ^("Make priority");
+                                on_click: (cx, Self::on_toggle_priority).Context::listener;
+                            },
+                        ],
+                    ]
+                ),
+                None => ^(
+                    .div.{ flex; flex_col; gap: 12.0.px }.[
+                        .div.{ text_size: 18.0.px; font_weight: FontWeight::BOLD }.["Nothing selected"],
+                        .div.{ text_size: 13.0.px; text_color: MUTED.rgb }.[
+                            "Choose a task from the list to see its details.",
+                        ],
+                    ]
+                ),
+            )
         }
     }
 }
@@ -433,70 +435,70 @@ impl Render for TaskBoard {
         let filters = [Filter::All, Filter::Open, Filter::Done];
 
         el! {
-            .div {
+            .div.{
                 flex; flex_col; size_full; p: 28.0.px; gap: 20.0.px;
                 bg: BACKGROUND.rgb; text_color: 0xe8edf7.rgb;
-            } [
-                .div { flex; items_center; justify_between; flex_shrink_0 } [
-                    .div { flex; flex_col; gap: 8.0.px } [
-                        .div { text_size: 11.0.px; text_color: ACCENT.rgb } ["WORKSPACE / INTERFACE LAB"],
-                        .div { text_size: 30.0.px; font_weight: FontWeight::BOLD } ["A little progress, every day."],
-                        .div { text_size: 13.0.px; text_color: MUTED.rgb } ["Select a task, set a priority, and keep things moving."],
+            }.[
+                .div.{ flex; items_center; justify_between; flex_shrink_0 }.[
+                    .div.{ flex; flex_col; gap: 8.0.px }.[
+                        .div.{ text_size: 11.0.px; text_color: ACCENT.rgb }.["WORKSPACE / INTERFACE LAB"],
+                        .div.{ text_size: 30.0.px; font_weight: FontWeight::BOLD }.["A little progress, every day."],
+                        .div.{ text_size: 13.0.px; text_color: MUTED.rgb }.["Select a task, set a priority, and keep things moving."],
                     ],
-                    "reset-board".Button::new {
+                    "reset-board".Button::new.{
                         label: "Reset demo";
                         on_click: (cx, Self::on_reset).Context::listener;
                     },
                 ],
-                .div { flex; gap: 14.0.px; flex_shrink_0 } [
-                    "OPEN TASKS".StatCard::with_label { value: $total - completed; color: ACCENT },
-                    "COMPLETED".StatCard::with_label { value: completed; color: GREEN },
-                    "PRIORITY / OPEN".StatCard::with_label { value: priority; color: AMBER },
+                .div.{ flex; gap: 14.0.px; flex_shrink_0 }.[
+                    "OPEN TASKS".StatCard::with_label.{ value: $(total - completed); color: ACCENT },
+                    "COMPLETED".StatCard::with_label.{ value: completed; color: GREEN },
+                    "PRIORITY / OPEN".StatCard::with_label.{ value: priority; color: AMBER },
                 ],
-                .div { flex; items_center; gap: 14.0.px; flex_shrink_0 } [
-                    .div { flex_1; h: 6.0.px; rounded_full; bg: BORDER.rgb; overflow_hidden } [
-                        .div { h_full; w: progress.relative; rounded_full; bg: GREEN.rgb },
+                .div.{ flex; items_center; gap: 14.0.px; flex_shrink_0 }.[
+                    .div.{ flex_1; h: 6.0.px; rounded_full; bg: BORDER.rgb; overflow_hidden }.[
+                        .div.{ h_full; w: progress.relative; rounded_full; bg: GREEN.rgb },
                     ],
-                    .div { text_size: 12.0.px; text_color: MUTED.rgb } [format!("{completed} of {total} complete")],
+                    .div.{ text_size: 12.0.px; text_color: MUTED.rgb }.[format!("{completed} of {total} complete")],
                 ],
-                .div { flex; flex_1; min_h_0; gap: 20.0.px } [
-                    .div { flex; flex_col; flex_1; min_w_0; gap: 14.0.px } [
-                        .div { flex; items_center; justify_between; flex_shrink_0 } [
-                            .div { text_size: 17.0.px; font_weight: FontWeight::BOLD } [format!("Tasks ({visible})")],
-                            "priority-only".Button::new {
+                .div.{ flex; flex_1; min_h_0; gap: 20.0.px }.[
+                    .div.{ flex; flex_col; flex_1; min_w_0; gap: 14.0.px }.[
+                        .div.{ flex; items_center; justify_between; flex_shrink_0 }.[
+                            .div.{ text_size: 17.0.px; font_weight: FontWeight::BOLD }.[format!("Tasks ({visible})")],
+                            "priority-only".Button::new.{
                                 label: "Priority only";
-                                highlighted: $self.priority_only;
+                                highlighted: self->priority_only;
                                 on_click: (cx, Self::on_toggle_priority_only).Context::listener;
                             },
                         ],
-                        .div { flex; gap: 8.0.px; flex_shrink_0 } [
-                            ..filters { into_iter; map: filter => (self, filter, cx).Self::filter_button },
+                        .div.{ flex; gap: 8.0.px; flex_shrink_0 }.[
+                            ..filters.{ into_iter; map: filter => (self, filter, cx).Self::filter_button },
                         ],
-                        .div { # "task-list"; flex; flex_col; flex_1; min_h_0; gap: 8.0.px; overflow_y_scroll } [
-                            @if (visible == 0)
-                                .div {
+                        .div.{ # "task-list"; flex; flex_col; flex_1; min_h_0; gap: 8.0.px; overflow_y_scroll }.[
+                            if $(visible == 0) [
+                                .div.{
                                     #? "empty-state".String::from;
                                     flex; flex_col; items_center; gap: 14.0.px; py: 36.0.px;
-                                } [
-                                    .div { text_size: 16.0.px } ["No tasks in this view"],
-                                    .div { text_size: 12.0.px; text_color: MUTED.rgb } ["Try another filter to see more tasks."],
-                                    "show-all".Button::new {
+                                }.[
+                                    .div.{ text_size: 16.0.px }.["No tasks in this view"],
+                                    .div.{ text_size: 12.0.px; text_color: MUTED.rgb }.["Try another filter to see more tasks."],
+                                    "show-all".Button::new.{
                                         label: "Show all tasks";
                                         highlighted: true;
                                         on_click: (cx, Self::on_show_all).Context::listener;
                                     },
                                 ],
-                            @else
+                            ] else [
                                 ..rows,
-                            @end,
+                            ],
                         ],
                     ],
-                    .div.panel {
-                        # "details"; #? "details-panel" { into };
+                    .div.panel.{
+                        # "details"; #? "details-panel".{ into };
                         w: 290.0.px; flex_shrink_0; p: 22.0.px; overflow_hidden;
-                    } [(self, cx).Self::details],
+                    }.[(self, cx).Self::details],
                 ],
-                .div { text_size: 11.0.px; text_color: MUTED.rgb; flex_shrink_0 } [
+                .div.{ text_size: 11.0.px; text_color: MUTED.rgb; flex_shrink_0 }.[
                     "Demo workspace · Changes stay in memory. Reset demo restores the starting tasks.",
                 ],
             ]

@@ -26,38 +26,38 @@ impl Node {
 #[test]
 fn deeply_nested_attributes_compile_with_default_recursion_limit() {
     let tree = el! {
-        .node { styled; styled; } [
-            .node { styled; styled; } [
-                .node { styled; styled; } [
-                    .node { styled; styled; } [
-                        .node { styled; styled; } [
-                            .node { styled; styled; } [
-                                .node { styled; styled; } [
-                                    .node { styled; styled; } [
-                                        .node { styled; styled; } [
-                                            .node { styled; styled; } [
-                                                .node { styled; styled; } [
-                                                    .node { styled; styled; } [
-                                                        .node { styled; styled; } [
-                                                            .node { styled; styled; } [
-                                                                .node { styled; styled; } [
-                                                                    .node { styled; styled; } [
-                                                                        .node { styled; styled; } [
-                                                                            .node { styled; styled; } [
-                                                                                .node { styled; styled; } [
-                                                                                    .node { styled; styled; } [
-                                                                                        .node { styled; styled; } [
-                                                                                            .node { styled; styled; } [
-                                                                                                .node { styled; styled; } [
-                                                                                                    .node { styled; styled; } [
-                                                                                                        .node { styled; styled; } [
-                                                                                                            .node { styled; styled; } [
-                                                                                                                .node { styled; styled; } [
-                                                                                                                    .node { styled; styled; } [
-                                                                                                                        .node { styled; styled; } [
-                                                                                                                            .node { styled; styled; } [
-                                                                                                                                .node { styled; styled; } [
-                                                                                                                                    .node { styled; styled; }
+        .node.{ styled; styled; }.[
+            .node.{ styled; styled; }.[
+                .node.{ styled; styled; }.[
+                    .node.{ styled; styled; }.[
+                        .node.{ styled; styled; }.[
+                            .node.{ styled; styled; }.[
+                                .node.{ styled; styled; }.[
+                                    .node.{ styled; styled; }.[
+                                        .node.{ styled; styled; }.[
+                                            .node.{ styled; styled; }.[
+                                                .node.{ styled; styled; }.[
+                                                    .node.{ styled; styled; }.[
+                                                        .node.{ styled; styled; }.[
+                                                            .node.{ styled; styled; }.[
+                                                                .node.{ styled; styled; }.[
+                                                                    .node.{ styled; styled; }.[
+                                                                        .node.{ styled; styled; }.[
+                                                                            .node.{ styled; styled; }.[
+                                                                                .node.{ styled; styled; }.[
+                                                                                    .node.{ styled; styled; }.[
+                                                                                        .node.{ styled; styled; }.[
+                                                                                            .node.{ styled; styled; }.[
+                                                                                                .node.{ styled; styled; }.[
+                                                                                                    .node.{ styled; styled; }.[
+                                                                                                        .node.{ styled; styled; }.[
+                                                                                                            .node.{ styled; styled; }.[
+                                                                                                                .node.{ styled; styled; }.[
+                                                                                                                    .node.{ styled; styled; }.[
+                                                                                                                        .node.{ styled; styled; }.[
+                                                                                                                            .node.{ styled; styled; }.[
+                                                                                                                                .node.{ styled; styled; }.[
+                                                                                                                                    .node.{ styled; styled; }
                                                                                                                                 ]
                                                                                                                             ]
                                                                                                                         ]
